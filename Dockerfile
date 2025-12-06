@@ -1,5 +1,5 @@
 # Build stage for React frontend
-FROM node:18-alpine as client-build
+FROM node:20-alpine as client-build
 WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm install
@@ -7,7 +7,7 @@ COPY client/ ./
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine
+FROM node:20-alpine
 WORKDIR /app/server
 
 # Copy server dependencies
