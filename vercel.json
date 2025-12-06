@@ -6,7 +6,11 @@
       "destination": "/server/index.js"
     },
     {
-      "source": "/((?!api/|assets/|.*\\..*).*)",
+      "source": "/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/((?!api/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ],
