@@ -4,6 +4,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/server/index.js"
+    },
+    {
+      "source": "/((?!api/|assets/|.*\\..*).*)",
+      "destination": "/index.html"
     }
   ],
   "builds": [

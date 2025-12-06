@@ -11,7 +11,7 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const CACHE_DIR = process.env.VERCEL ? '/tmp/cache' : path.join(__dirname, 'cache');
 const TRENDING_CACHE_FILE = path.join(CACHE_DIR, 'daily_trends.json');
 const LOGO_DIR = process.env.VERCEL ? '/tmp/logos' : path.join(__dirname, 'public/logos');
@@ -400,6 +400,15 @@ app.get('/api/logo', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
+
+// Serve static files from the React client (for single-container deployment)
+const clientBuildPath = path.join(__dirname, '../client/dist');
+if (fs.existsSync(clientBuildPath)) {
+  app.use(express.static(clientBuildPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+}
 
 // Export for Vercel
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
