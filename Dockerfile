@@ -18,7 +18,8 @@ RUN npm install --production
 COPY server/ ./
 
 # Copy built frontend from previous stage
-COPY --from=client-build /app/client/dist ../client/dist
+# Note: vite.config.js now outputs to ../public, so we copy from /app/public
+COPY --from=client-build /app/public ../public
 
 # Environment variables
 ENV NODE_ENV=production

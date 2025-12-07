@@ -402,11 +402,22 @@ app.get('/api/logo', async (req, res) => {
 });
 
 // Serve static files from the React client (for single-container deployment)
-const clientBuildPath = path.join(__dirname, '../client/dist');
-if (fs.existsSync(clientBuildPath)) {
-  app.use(express.static(clientBuildPath));
+// Priority 1: ../public (new standard build output)
+// Priority 2: ../client/dist (legacy)
+const publicBuildPath = path.join(__dirname, '../public');
+const clientDistPath = path.join(__dirname, '../client/dist');
+
+if (fs.existsSync(publicBuildPath)) {
+  console.log('Serving static files from ../public');
+  app.use(express.static(publicBuildPath));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(clientBuildPath, 'index.html'));
+    res.sendFile(path.join(publicBuildPath, 'index.html'));
+  });
+} else if (fs.existsSync(clientDistPath)) {
+  console.log('Serving static files from ../client/dist');
+  app.use(express.static(clientDistPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
   });
 }
 
