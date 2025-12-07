@@ -424,15 +424,31 @@ if (fs.existsSync(publicBuildPath) && fs.existsSync(path.join(publicBuildPath, '
 // Export for Vercel
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true'; // Vercel sets this to '1'
 
+// Health Check Endpoint
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
 if (!isVercel) {
   const host = '0.0.0.0';
-  app.listen(PORT, host, () => {
-    console.log(`Server is running on http://${host}:${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV}`);
-    console.log(`Static files check:`);
-    console.log(`- Public path: ${publicBuildPath} (${fs.existsSync(publicBuildPath)})`);
-    console.log(`- Dist path: ${distBuildPath} (${fs.existsSync(distBuildPath)})`);
-  });
+  console.log('Starting server...');
+  try {
+    const server = app.listen(PORT, host, () => {
+      console.log(`Server is running on http://${host}:${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV}`);
+      console.log(`Static files check:`);
+      console.log(`- Public path: ${publicBuildPath} (${fs.existsSync(publicBuildPath)})`);
+      console.log(`- Dist path: ${distBuildPath} (${fs.existsSync(distBuildPath)})`);
+    });
+
+    server.on('error', (e) => {
+      console.error('Server startup error:', e);
+      process.exit(1);
+    });
+  } catch (e) {
+    console.error('Failed to start server:', e);
+    process.exit(1);
+  }
 }
 
 module.exports = app;

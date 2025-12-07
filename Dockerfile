@@ -23,11 +23,10 @@ COPY --from=client-build /app/public /app/public
 
 # Environment variables
 ENV NODE_ENV=production
-ENV PORT=7860
-# 7860 is the default port for Hugging Face Spaces
+ENV PORT=3000
 
 # Expose port
-EXPOSE 7860
+EXPOSE 3000
 
 # Start server
 CMD ["node", "index.js"]
