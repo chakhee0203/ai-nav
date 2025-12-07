@@ -54,23 +54,28 @@ function App() {
   }, [])
 
   const fetchTools = async () => {
+    setLoading(true)
     try {
-      // 使用 /api/trending 获取每日热门工具
-      const res = await axios.get('/api/trending')
-      if (Array.isArray(res.data) && res.data.length > 0) {
-        setTools(res.data)
-        return
+      try {
+        // 使用 /api/trending 获取每日热门工具
+        const res = await axios.get('/api/trending')
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setTools(res.data)
+          return
+        }
+      } catch (error) {
+        console.error('Error fetching tools:', error)
       }
-    } catch (error) {
-      console.error('Error fetching tools:', error)
-    }
 
-    // Fallback: 如果 trending 失败或为空，获取静态全量列表
-    try {
-      const res = await axios.get('/api/tools')
-      setTools(res.data)
-    } catch (error) {
-      console.error('Error fetching static tools:', error)
+      // Fallback: 如果 trending 失败或为空，获取静态全量列表
+      try {
+        const res = await axios.get('/api/tools')
+        setTools(res.data)
+      } catch (error) {
+        console.error('Error fetching static tools:', error)
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
