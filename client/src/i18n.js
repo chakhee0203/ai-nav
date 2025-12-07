@@ -5,7 +5,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 const resources = {
   en: {
     translation: {
-      "title": "AI Navigation",
+      "title": "NiuMa AI Navigation",
       "subtitle": "Discover the best AI tools for your workflow. Powered by intelligent search.",
       "search_placeholder": "Ask AI: 'I need a tool to generate logos' or 'Help me write code'...",
       "search_results": "Search Results",
@@ -19,7 +19,7 @@ const resources = {
   },
   zh: {
     translation: {
-      "title": "AI 导航站",
+      "title": "牛马AI 导航站",
       "subtitle": "发现最适合您工作流程的 AI 工具。由智能搜索驱动。",
       "search_placeholder": "问 AI：'我需要一个生成 Logo 的工具' 或 '帮我写代码'...",
       "search_results": "搜索结果",
