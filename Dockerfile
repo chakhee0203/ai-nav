@@ -19,7 +19,7 @@ COPY server/ ./
 
 # Copy built frontend from previous stage
 # Note: vite.config.js now outputs to ../public, so we copy from /app/public
-COPY --from=client-build /app/public ../public
+COPY --from=client-build /app/public /app/public
 
 # Environment variables
 ENV NODE_ENV=production

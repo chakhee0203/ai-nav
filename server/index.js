@@ -422,9 +422,16 @@ if (fs.existsSync(publicBuildPath) && fs.existsSync(path.join(publicBuildPath, '
 }
 
 // Export for Vercel
-if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true'; // Vercel sets this to '1'
+
+if (!isVercel) {
+  const host = '0.0.0.0';
+  app.listen(PORT, host, () => {
+    console.log(`Server is running on http://${host}:${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV}`);
+    console.log(`Static files check:`);
+    console.log(`- Public path: ${publicBuildPath} (${fs.existsSync(publicBuildPath)})`);
+    console.log(`- Dist path: ${distBuildPath} (${fs.existsSync(distBuildPath)})`);
   });
 }
 
