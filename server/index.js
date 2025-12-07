@@ -402,22 +402,22 @@ app.get('/api/logo', async (req, res) => {
 });
 
 // Serve static files from the React client (for single-container deployment)
-// Priority 1: ../public (new standard build output)
-// Priority 2: ../client/dist (legacy)
 const publicBuildPath = path.join(__dirname, '../public');
-const clientDistPath = path.join(__dirname, '../client/dist');
+const distBuildPath = path.join(__dirname, '../client/dist');
 
-if (fs.existsSync(publicBuildPath)) {
+if (fs.existsSync(publicBuildPath) && fs.existsSync(path.join(publicBuildPath, 'index.html'))) {
+  // Vercel / New Structure
   console.log('Serving static files from ../public');
   app.use(express.static(publicBuildPath));
   app.get('*', (req, res) => {
     res.sendFile(path.join(publicBuildPath, 'index.html'));
   });
-} else if (fs.existsSync(clientDistPath)) {
+} else if (fs.existsSync(distBuildPath)) {
+  // Old Structure / Docker fallback
   console.log('Serving static files from ../client/dist');
-  app.use(express.static(clientDistPath));
+  app.use(express.static(distBuildPath));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(clientDistPath, 'index.html'));
+    res.sendFile(path.join(distBuildPath, 'index.html'));
   });
 }
 
