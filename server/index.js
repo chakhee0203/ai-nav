@@ -1,3 +1,13 @@
+console.log('Process starting...');
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+  // Keep the process alive to allow logs to be flushed/read, or exit gracefully
+  // process.exit(1); 
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
+
 const express = require('express');
 const cors = require('cors');
 const Fuse = require('fuse.js');

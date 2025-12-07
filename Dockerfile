@@ -28,5 +28,5 @@ ENV NODE_ENV=production
 # Expose port (Zeabur uses this to detect port)
 EXPOSE 3000
 
-# Start server
-CMD ["node", "index.js"]
+# Start server with debug logging
+CMD ["sh", "-c", "echo 'Container started, launching Node.js...' && node index.js"]
