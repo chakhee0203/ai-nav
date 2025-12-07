@@ -422,7 +422,7 @@ if (fs.existsSync(publicBuildPath) && fs.existsSync(path.join(publicBuildPath, '
 }
 
 // Export for Vercel
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
   });
