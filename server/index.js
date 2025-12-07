@@ -401,24 +401,36 @@ app.get('/api/logo', async (req, res) => {
   }
 });
 
-// Serve static files from the React client (for single-container deployment)
-const publicBuildPath = path.join(__dirname, '../public');
-const distBuildPath = path.join(__dirname, '../client/dist');
+// Serve static files from the React client
+// Strategy: Find where index.html is located
+const localPublicPath = path.join(__dirname, 'public');
+const rootPublicPath = path.join(__dirname, '../public');
+const clientDistPath = path.join(__dirname, '../client/dist');
 
-if (fs.existsSync(publicBuildPath) && fs.existsSync(path.join(publicBuildPath, 'index.html'))) {
-  // Vercel / New Structure
-  console.log('Serving static files from ../public');
-  app.use(express.static(publicBuildPath));
+let staticDir = null;
+
+if (fs.existsSync(path.join(localPublicPath, 'index.html'))) {
+  console.log('Found React app in ./public (Docker/Merged)');
+  staticDir = localPublicPath;
+} else if (fs.existsSync(path.join(rootPublicPath, 'index.html'))) {
+  console.log('Found React app in ../public (Vercel/Local)');
+  staticDir = rootPublicPath;
+} else if (fs.existsSync(path.join(clientDistPath, 'index.html'))) {
+  console.log('Found React app in ../client/dist (Legacy)');
+  staticDir = clientDistPath;
+}
+
+if (staticDir) {
+  app.use(express.static(staticDir));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(publicBuildPath, 'index.html'));
+    // Exclude API routes and logos from wildcard match (handled by express router order, but good to be safe)
+    if (req.path.startsWith('/api') || req.path.startsWith('/logos')) {
+      return res.status(404).send('Not Found');
+    }
+    res.sendFile(path.join(staticDir, 'index.html'));
   });
-} else if (fs.existsSync(distBuildPath)) {
-  // Old Structure / Docker fallback
-  console.log('Serving static files from ../client/dist');
-  app.use(express.static(distBuildPath));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(distBuildPath, 'index.html'));
-  });
+} else {
+  console.log('Warning: No React app build found. API only mode.');
 }
 
 // Export for Vercel
@@ -436,9 +448,7 @@ if (!isVercel) {
     const server = app.listen(PORT, host, () => {
       console.log(`Server is running on http://${host}:${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV}`);
-      console.log(`Static files check:`);
-      console.log(`- Public path: ${publicBuildPath} (${fs.existsSync(publicBuildPath)})`);
-      console.log(`- Dist path: ${distBuildPath} (${fs.existsSync(distBuildPath)})`);
+      console.log(`Static Directory: ${staticDir || 'None'}`);
     });
 
     server.on('error', (e) => {
