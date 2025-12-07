@@ -1,13 +1,3 @@
-console.log('Process starting...');
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
-  // Keep the process alive to allow logs to be flushed/read, or exit gracefully
-  // process.exit(1); 
-});
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('UNHANDLED REJECTION:', reason);
-});
-
 const express = require('express');
 const cors = require('cors');
 const Fuse = require('fuse.js');
@@ -142,7 +132,8 @@ app.get('/api/trending', async (req, res) => {
       请只返回 JSON 数组，不要包含 markdown 代码块。
       `;
 
-      const completion = await openai.chat.completions.create({
+      // 增加超时控制，防止 Vercel 函数超时
+      const completionPromise = openai.chat.completions.create({
         messages: [
           { role: "system", content: systemPrompt }
         ],
@@ -150,6 +141,12 @@ app.get('/api/trending', async (req, res) => {
         temperature: 0.3,
         response_format: { type: "json_object" } 
       });
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('DeepSeek API Timeout')), 5000)
+      );
+
+      const completion = await Promise.race([completionPromise, timeoutPromise]);
 
       const content = completion.choices[0].message.content;
       console.log('DeepSeek trending response:', content);
@@ -445,11 +442,6 @@ if (staticDir) {
 
 // Export for Vercel
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true'; // Vercel sets this to '1'
-
-// Health Check Endpoint
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
 
 if (!isVercel) {
   const host = '0.0.0.0';
