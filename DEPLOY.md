@@ -2,6 +2,27 @@
 
 本项目推荐使用 **Vercel** 进行部署，这是最简单、免费且稳定的方式。
 
+## 使用 Zeabur 部署 (Docker 容器化)
+Zeabur 提供了极简的容器化部署体验，适合希望拥有完整容器环境的用户。
+
+1.  **注册 Zeabur 账号**
+    *   访问 [https://zeabur.com](https://zeabur.com) 并使用 GitHub 账号登录。
+
+2.  **创建项目**
+    *   点击 "Create Project" 创建一个新项目。
+
+3.  **部署服务**
+    *   在项目中点击 "Deploy New Service"。
+    *   选择 "GitHub"，然后选择 `ai-nav` 仓库。
+    *   Zeabur 会自动检测根目录的 `Dockerfile` 并开始构建。
+
+4.  **配置域名**
+    *   在 "Networking" (网络) 选项卡中，点击 "Generate Domain" 生成一个免费域名，或者绑定自定义域名。
+
+5.  **配置环境变量 (可选)**
+    *   在 "Variables" (变量) 选项卡中添加：
+    *   `DEEPSEEK_API_KEY`: 你的 DeepSeek API 密钥。
+
 ## 使用 Vercel 部署 (推荐)
 
 Vercel 提供了对前端 (React) 和后端 (Node.js/Express) 的完美支持，且对个人开发者永久免费。
