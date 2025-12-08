@@ -8,7 +8,8 @@ RUN npm install
 
 # Copy client source code and build
 COPY client/ ./
-RUN npm run build
+# Force output to 'dist' directory inside /app/client, ignoring vite.config.js setting
+RUN npm run build -- --outDir dist
 
 # Stage 2: Setup Server
 FROM node:20-alpine
