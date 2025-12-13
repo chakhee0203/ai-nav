@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const XLSX = require('xlsx');
 
 // Helper to check API Key (duplicated from pdf.js to keep modules independent)
 const checkApiKey = (req, res, next) => {
@@ -135,6 +136,49 @@ router.post('/to-json', checkApiKey, async (req, res) => {
   } catch (error) {
     console.error('Excel to JSON Error:', error.response?.data || error.message);
     res.status(500).json({ error: error.response?.data?.message || error.message });
+  }
+});
+
+// JSON to Excel (Local)
+router.post('/json-to-excel', async (req, res) => {
+  const { file } = req.body;
+
+  try {
+    if (!file) {
+      return res.status(400).json({ error: 'Missing file content' });
+    }
+
+    let jsonContent;
+    // Remove Data URI prefix if present
+    const base64Data = file.includes('base64,') ? file.split('base64,')[1] : file;
+    
+    try {
+      const jsonStr = Buffer.from(base64Data, 'base64').toString('utf-8');
+      jsonContent = JSON.parse(jsonStr);
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid JSON file' });
+    }
+
+    if (!Array.isArray(jsonContent)) {
+       // If it's a single object, wrap in array
+       jsonContent = [jsonContent];
+    }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(jsonContent);
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+
+    // Write to base64 string
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+    
+    // Construct Data URI
+    const dataUri = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${wbout}`;
+
+    res.json({ result: dataUri });
+
+  } catch (error) {
+    console.error('JSON to Excel Error:', error);
+    res.status(500).json({ error: 'Failed to convert JSON to Excel: ' + error.message });
   }
 });
 

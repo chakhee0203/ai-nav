@@ -13,6 +13,7 @@ const ExcelTools = () => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('pdf-to-excel');
   const [files, setFiles] = useState([]);
+  const [jsonText, setJsonText] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -21,7 +22,8 @@ const ExcelTools = () => {
   const tabs = [
     { id: 'pdf-to-excel', label: t('excel_tab_pdf_to_excel') },
     { id: 'to-pdf', label: t('excel_tab_to_pdf') },
-    { id: 'to-json', label: t('excel_tab_to_json') }
+    { id: 'to-json', label: t('excel_tab_to_json') },
+    { id: 'json-to-excel', label: t('excel_tab_json_to_excel') }
   ];
 
   const handleFileChange = (e) => {
@@ -30,6 +32,7 @@ const ExcelTools = () => {
     // Validate file type based on tab
     const valid = selectedFiles.every(file => {
       if (activeTab === 'pdf-to-excel') return file.type === 'application/pdf';
+      if (activeTab === 'json-to-excel') return file.type === 'application/json' || file.name.endsWith('.json');
       return file.type.includes('excel') || file.type.includes('spreadsheet') || file.name.endsWith('.xls') || file.name.endsWith('.xlsx');
     });
 
@@ -54,7 +57,9 @@ const ExcelTools = () => {
   };
 
   const handleProcess = async () => {
-    if (files.length === 0) return;
+    if (activeTab !== 'json-to-excel' && files.length === 0) return;
+    if (activeTab === 'json-to-excel' && !jsonText.trim()) return;
+
     setLoading(true);
     setError(null);
     setResult(null);
@@ -72,6 +77,17 @@ const ExcelTools = () => {
       } else if (activeTab === 'to-json') {
         endpoint = '/api/excel/to-json';
         payload = { file: files[0] };
+      } else if (activeTab === 'json-to-excel') {
+        endpoint = '/api/excel/json-to-excel';
+        // Convert JSON text to base64
+        try {
+            // Validate JSON
+            JSON.parse(jsonText);
+            const base64 = btoa(unescape(encodeURIComponent(jsonText)));
+            payload = { file: base64 };
+        } catch (e) {
+            throw new Error(t('invalid_json_format') || "Invalid JSON format");
+        }
       }
 
       const res = await axios.post(endpoint, payload);
@@ -101,7 +117,7 @@ const ExcelTools = () => {
         {tabs.map(tab => (
           <button
             key={tab.id}
-            onClick={() => { setActiveTab(tab.id); setFiles([]); setResult(null); setError(null); }}
+            onClick={() => { setActiveTab(tab.id); setFiles([]); setJsonText(''); setResult(null); setError(null); }}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.id 
                 ? 'border-green-500 text-green-600' 
@@ -115,6 +131,16 @@ const ExcelTools = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-4">
+          {activeTab === 'json-to-excel' ? (
+            <div className="flex flex-col h-[200px]">
+                <textarea
+                    value={jsonText}
+                    onChange={(e) => setJsonText(e.target.value)}
+                    placeholder={t('json_input_placeholder') || 'Paste your JSON array here... e.g. [{"name": "Alice", "age": 30}]'}
+                    className="w-full h-full p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-xs resize-none"
+                />
+            </div>
+          ) : (
           <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-green-400 hover:bg-green-50 transition-all cursor-pointer relative group min-h-[200px]">
             <input
               type="file"
@@ -136,6 +162,7 @@ const ExcelTools = () => {
               {activeTab === 'pdf-to-excel' ? 'PDF files' : 'Excel files (.xls, .xlsx)'}
             </p>
           </div>
+          )}
 
           {activeTab === 'pdf-to-excel' && (
             <div>
@@ -154,9 +181,9 @@ const ExcelTools = () => {
 
           <button
             onClick={handleProcess}
-            disabled={files.length === 0 || loading}
+            disabled={(activeTab === 'json-to-excel' ? !jsonText.trim() : files.length === 0) || loading}
             className={`w-full py-2.5 px-4 rounded-lg font-medium text-white transition-all flex items-center justify-center gap-2 ${
-              files.length === 0 || loading
+              (activeTab === 'json-to-excel' ? !jsonText.trim() : files.length === 0) || loading
                 ? 'bg-slate-300 cursor-not-allowed'
                 : 'bg-green-600 hover:bg-green-700 shadow-sm hover:shadow'
             }`}

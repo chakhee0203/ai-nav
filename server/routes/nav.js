@@ -375,26 +375,31 @@ router.get('/logo', async (req, res) => {
     }
 
     // 2. 尝试从多个源下载
+    // 优先使用第三方服务，因为直接访问往往会有防爬虫策略 (403 Forbidden)
     const candidates = [
       `https://logo.clearbit.com/${domain}`,
+      `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${domain}&size=128`,
+      `https://icons.duckduckgo.com/ip3/${domain}.ico`,
       `https://${domain}/favicon.ico`,
-      `https://${domain}/favicon.png`,
-      `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+      `https://${domain}/favicon.png`
     ];
 
     let downloaded = false;
 
     for (const logoUrl of candidates) {
       try {
-        console.log(`Trying to download logo for ${domain} from ${logoUrl}...`);
+        // console.log(`Trying to download logo for ${domain} from ${logoUrl}...`);
         const response = await axios({
           method: 'get',
           url: logoUrl,
           responseType: 'stream',
           timeout: 5000, // 5秒超时
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': `https://${domain}/` // 尝试添加 Referer 绕过部分防盗链
+          },
+          validateStatus: (status) => status === 200 // 只接受 200 OK
         });
 
         if (response.status === 200) {
@@ -406,12 +411,19 @@ router.get('/logo', async (req, res) => {
             writer.on('error', reject);
           });
           
+          // 检查下载的文件大小，防止下载到空文件或错误页面
+          const stats = fs.statSync(filePath);
+          if (stats.size < 100) { // 如果小于 100 字节，可能是假文件
+             fs.unlinkSync(filePath);
+             throw new Error('Downloaded file is too small');
+          }
+
           downloaded = true;
-          console.log(`Successfully downloaded logo for ${domain} from ${logoUrl}`);
+          // console.log(`Successfully downloaded logo for ${domain} from ${logoUrl}`);
           break; // 下载成功，跳出循环
         }
       } catch (err) {
-        console.log(`Failed to download from ${logoUrl}: ${err.message}`);
+        // console.log(`Debug: Failed to download from ${logoUrl}: ${err.message}`);
         // 继续尝试下一个
       }
     }
