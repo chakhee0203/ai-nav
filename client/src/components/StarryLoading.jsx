@@ -79,9 +79,9 @@ const StarryLoading = () => {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .animate-pulse-slow {
-            animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+          animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
         .animate-spin-slow {
             animation: spin 8s linear infinite;

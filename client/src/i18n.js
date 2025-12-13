@@ -36,14 +36,6 @@ const resources = {
       "copied": "Copied!",
       "gen_error": "Error generating prompt. Please try again.",
       
-      "json_fmt_title": "JSON Formatter",
-      "json_fmt_desc": "Validate, format, and minify your JSON data.",
-      "input_json": "Input JSON",
-      "output_json": "Output",
-      "output_placeholder": "Formatted result will appear here...",
-      "format_btn": "Format (Prettify)",
-      "minify_btn": "Minify",
-      
       "img_resizer_title": "Image Resizer",
       "img_resizer_desc": "Resize images quickly in your browser. No server upload required.",
       "upload_text": "Click or drag image here",
@@ -64,7 +56,34 @@ const resources = {
       "recognize_btn": "Recognize & Translate",
       "recognizing": "Processing...",
       "original_text": "Original Text",
-      "translated_text": "Translated Text"
+      "translated_text": "Translated Text",
+
+      "pdf_tools_title": "PDF Tools",
+      "pdf_tools_desc": "Convert, Merge, and Split PDF files easily.",
+      "pdf_tab_convert": "Convert to Text",
+      "pdf_tab_merge": "Merge PDFs",
+      "pdf_tab_split": "Split PDF",
+      "pdf_upload_hint": "Select PDF file(s)",
+      "pdf_convert_btn": "Convert to Text",
+      "pdf_merge_btn": "Merge Files",
+      "pdf_split_btn": "Split File",
+      "pdf_pages_hint": "Pages (e.g. 1-2,5)",
+      "pdf_result_url": "Download URL",
+      "pdf_processing": "Processing...",
+
+      "excel_tools_title": "Excel Tools",
+      "excel_tools_desc": "Convert PDF to Excel, Excel to PDF, or Excel to JSON.",
+      "excel_tab_pdf_to_excel": "PDF to Excel",
+      "excel_tab_to_pdf": "Excel to PDF",
+      "excel_tab_to_json": "Excel to JSON",
+      "file_selected": "{{count}} file(s) selected",
+      "start_process": "Start Process",
+      "processing": "Processing...",
+      "success": "Success",
+      "download_file": "Download File",
+      "result_placeholder": "Result will appear here",
+      "invalid_file_type": "Invalid file type",
+      "pdf_pages_optional": "Pages (Optional)"
     }
   },
   zh: {
@@ -100,14 +119,6 @@ const resources = {
       "copied": "已复制！",
       "gen_error": "生成失败，请重试。",
       
-      "json_fmt_title": "JSON 格式化",
-      "json_fmt_desc": "验证、格式化和压缩您的 JSON 数据。",
-      "input_json": "输入 JSON",
-      "output_json": "输出结果",
-      "output_placeholder": "格式化结果将显示在这里...",
-      "format_btn": "格式化 (美化)",
-      "minify_btn": "压缩",
-      
       "img_resizer_title": "图片压缩/缩放",
       "img_resizer_desc": "在浏览器中快速调整图片大小，无需上传服务器。",
       "upload_text": "点击或拖拽图片到这里",
@@ -128,7 +139,34 @@ const resources = {
       "recognize_btn": "识别并翻译",
       "recognizing": "正在处理中...",
       "original_text": "识别原文",
-      "translated_text": "翻译结果"
+      "translated_text": "翻译结果",
+
+      "pdf_tools_title": "PDF 工具",
+      "pdf_tools_desc": "轻松实现 PDF 转文字、合并及拆分。",
+      "pdf_tab_convert": "PDF 转文字",
+      "pdf_tab_merge": "合并 PDF",
+      "pdf_tab_split": "拆分 PDF",
+      "pdf_upload_hint": "选择 PDF 文件",
+      "pdf_convert_btn": "开始转换",
+      "pdf_merge_btn": "合并文件",
+      "pdf_split_btn": "拆分文件",
+      "pdf_pages_hint": "页码范围 (如 1-2,5)",
+      "pdf_result_url": "下载链接",
+      "pdf_processing": "处理中...",
+
+      "excel_tools_title": "Excel 工具",
+      "excel_tools_desc": "PDF 转 Excel、Excel 转 PDF 以及 Excel 转 JSON。",
+      "excel_tab_pdf_to_excel": "PDF 转 Excel",
+      "excel_tab_to_pdf": "Excel 转 PDF",
+      "excel_tab_to_json": "Excel 转 JSON",
+      "file_selected": "已选择 {{count}} 个文件",
+      "start_process": "开始处理",
+      "processing": "处理中...",
+      "success": "处理成功",
+      "download_file": "下载文件",
+      "result_placeholder": "处理结果将显示在这里",
+      "invalid_file_type": "文件类型无效",
+      "pdf_pages_optional": "页码范围（可选）"
     }
   }
 };

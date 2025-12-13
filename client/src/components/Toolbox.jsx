@@ -1,13 +1,218 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
-  Wrench, Zap, Image as ImageIcon, FileJson, 
+  Wrench, Zap, Image as ImageIcon, 
   ArrowRight, Copy, Download, Upload, RefreshCw, Check,
-  Scan
+  Scan, FileText, Layers, Scissors, Sheet, FileSpreadsheet
 } from 'lucide-react';
 import axios from 'axios';
 
 // --- Sub-components for each tool ---
+
+const ExcelTools = () => {
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState('pdf-to-excel');
+  const [files, setFiles] = useState([]);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [pages, setPages] = useState('');
+
+  const tabs = [
+    { id: 'pdf-to-excel', label: t('excel_tab_pdf_to_excel') },
+    { id: 'to-pdf', label: t('excel_tab_to_pdf') },
+    { id: 'to-json', label: t('excel_tab_to_json') }
+  ];
+
+  const handleFileChange = (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    
+    // Validate file type based on tab
+    const valid = selectedFiles.every(file => {
+      if (activeTab === 'pdf-to-excel') return file.type === 'application/pdf';
+      return file.type.includes('excel') || file.type.includes('spreadsheet') || file.name.endsWith('.xls') || file.name.endsWith('.xlsx');
+    });
+
+    if (!valid) {
+      setError(t('invalid_file_type'));
+      return;
+    }
+
+    // Convert to base64
+    Promise.all(selectedFiles.map(file => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+      });
+    })).then(base64Files => {
+      setFiles(base64Files);
+      setError(null);
+      setResult(null);
+    });
+  };
+
+  const handleProcess = async () => {
+    if (files.length === 0) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      let endpoint = '';
+      let payload = {};
+
+      if (activeTab === 'pdf-to-excel') {
+        endpoint = '/api/excel/pdf-to-excel';
+        payload = { file: files[0], pages };
+      } else if (activeTab === 'to-pdf') {
+        endpoint = '/api/excel/to-pdf';
+        payload = { file: files[0] };
+      } else if (activeTab === 'to-json') {
+        endpoint = '/api/excel/to-json';
+        payload = { file: files[0] };
+      }
+
+      const res = await axios.post(endpoint, payload);
+      setResult(res.data.result);
+    } catch (err) {
+      console.error('Excel processing failed:', err);
+      setError(err.response?.data?.error || err.message || 'Processing failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+          <Sheet className="w-5 h-5 text-green-600" />
+          {t('excel_tools_title')}
+        </h3>
+        <p className="text-slate-500 text-sm">
+          {t('excel_tools_desc')}
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200 mb-4">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => { setActiveTab(tab.id); setFiles([]); setResult(null); setError(null); }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.id 
+                ? 'border-green-500 text-green-600' 
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-green-400 hover:bg-green-50 transition-all cursor-pointer relative group min-h-[200px]">
+            <input
+              type="file"
+              accept={activeTab === 'pdf-to-excel' ? ".pdf" : ".xls,.xlsx"}
+              onChange={handleFileChange}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+            <div className="bg-white p-3 rounded-full shadow-sm mb-3 group-hover:scale-110 transition-transform">
+              {files.length > 0 ? (
+                <Check className="w-6 h-6 text-green-500" />
+              ) : (
+                <Upload className="w-6 h-6 text-green-500" />
+              )}
+            </div>
+            <p className="text-slate-600 font-medium text-sm">
+              {files.length > 0 ? t('file_selected', { count: files.length }) : t('upload_text')}
+            </p>
+            <p className="text-slate-400 text-xs mt-1">
+              {activeTab === 'pdf-to-excel' ? 'PDF files' : 'Excel files (.xls, .xlsx)'}
+            </p>
+          </div>
+
+          {activeTab === 'pdf-to-excel' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                {t('pdf_pages_optional')}
+              </label>
+              <input
+                type="text"
+                value={pages}
+                onChange={(e) => setPages(e.target.value)}
+                placeholder="e.g. 1-2,5"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+          )}
+
+          <button
+            onClick={handleProcess}
+            disabled={files.length === 0 || loading}
+            className={`w-full py-2.5 px-4 rounded-lg font-medium text-white transition-all flex items-center justify-center gap-2 ${
+              files.length === 0 || loading
+                ? 'bg-slate-300 cursor-not-allowed'
+                : 'bg-green-600 hover:bg-green-700 shadow-sm hover:shadow'
+            }`}
+          >
+            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+            {loading ? t('processing') : t('start_process')}
+          </button>
+          
+          {error && (
+            <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 flex flex-col relative min-h-[300px]">
+          {result ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4">
+              <div className="bg-white p-4 rounded-full shadow-sm">
+                <Check className="w-8 h-8 text-green-500" />
+              </div>
+              <h4 className="text-lg font-medium text-slate-800">{t('success')}</h4>
+              
+              {activeTab === 'to-json' ? (
+                <div className="w-full h-64 bg-white border border-slate-200 rounded-lg overflow-auto p-4 text-xs font-mono">
+                  {typeof result === 'string' && result.startsWith('http') ? (
+                     <a href={result} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all">
+                       {result}
+                     </a>
+                  ) : (
+                    <pre>{JSON.stringify(result, null, 2)}</pre>
+                  )}
+                </div>
+              ) : (
+                <a 
+                  href={result} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-white border border-slate-300 px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-50 hover:text-green-600 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  {t('download_file')}
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+              <FileSpreadsheet className="w-12 h-12 mb-2 opacity-20" />
+              <p className="text-sm">{t('result_placeholder')}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ImageOcrTranslator = () => {
   const { t } = useTranslation();
@@ -44,7 +249,7 @@ const ImageOcrTranslator = () => {
     setResult(null);
 
     try {
-      const res = await axios.post('/api/ocr-translate', {
+      const res = await axios.post('/api/tools/ocr-translate', {
         image: image,
         targetLang
       });
@@ -170,7 +375,7 @@ const PromptGenerator = () => {
     setLoading(true);
     setResult('');
     try {
-      const res = await axios.post('/api/generate-prompt', { input, type });
+      const res = await axios.post('/api/tools/generate-prompt', { input, type });
       setResult(res.data.result);
     } catch (error) {
       console.error('Generation failed:', error);
@@ -269,104 +474,7 @@ const PromptGenerator = () => {
   );
 };
 
-const JsonFormatter = () => {
-  const { t } = useTranslation();
-  const [input, setInput] = useState('');
-  const [output, setOutput] = useState('');
-  const [error, setError] = useState(null);
-  const [copied, setCopied] = useState(false);
 
-  const handleFormat = () => {
-    if (!input.trim()) return;
-    try {
-      const parsed = JSON.parse(input);
-      setOutput(JSON.stringify(parsed, null, 2));
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-      setOutput('');
-    }
-  };
-
-  const handleMinify = () => {
-    if (!input.trim()) return;
-    try {
-      const parsed = JSON.parse(input);
-      setOutput(JSON.stringify(parsed));
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-      setOutput('');
-    }
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(output);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="space-y-6 h-full flex flex-col">
-      <div>
-        <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
-          <FileJson className="w-5 h-5 text-blue-500" />
-          {t('json_fmt_title')}
-        </h3>
-        <p className="text-slate-500 text-sm">
-          {t('json_fmt_desc')}
-        </p>
-      </div>
-
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-[400px]">
-        <div className="flex flex-col">
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('input_json')}</label>
-          <textarea
-            className="flex-1 w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 transition-all font-mono text-xs resize-none"
-            placeholder='{"key": "value"}'
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col relative">
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-sm font-medium text-slate-700">{t('output_json')}</label>
-            {output && (
-              <button 
-                onClick={handleCopy}
-                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 transition-colors"
-              >
-                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                {copied ? t('copied') : t('copy')}
-              </button>
-            )}
-          </div>
-          <textarea
-            readOnly
-            className={`flex-1 w-full p-3 border rounded-lg font-mono text-xs resize-none bg-slate-50 ${error ? 'border-red-300 text-red-600' : 'border-slate-200 text-slate-700'}`}
-            value={error || output}
-            placeholder={t('output_placeholder')}
-          />
-        </div>
-      </div>
-
-      <div className="flex gap-4">
-        <button
-          onClick={handleFormat}
-          className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all text-sm font-medium"
-        >
-          {t('format_btn')}
-        </button>
-        <button
-          onClick={handleMinify}
-          className="flex-1 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-200 transition-all text-sm font-medium"
-        >
-          {t('minify_btn')}
-        </button>
-      </div>
-    </div>
-  );
-};
 
 const ImageResizer = () => {
   const { t } = useTranslation();
@@ -547,6 +655,180 @@ const ImageResizer = () => {
   );
 };
 
+const PdfTools = () => {
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState('convert'); // convert | merge | split
+  const [files, setFiles] = useState([]);
+  const [pages, setPages] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleFileChange = (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    // Convert to base64
+    Promise.all(selectedFiles.map(file => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    })).then(base64Files => {
+      setFiles(base64Files);
+      setResult(null);
+      setError(null);
+    }).catch(err => {
+      setError('Failed to read files');
+    });
+  };
+
+  const handleProcess = async () => {
+    if (files.length === 0) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      let endpoint = '';
+      let payload = {};
+
+      if (activeTab === 'convert') {
+        endpoint = '/api/pdf/convert/text';
+        payload = { file: files[0] };
+      } else if (activeTab === 'merge') {
+        endpoint = '/api/pdf/merge';
+        payload = { files: files };
+      } else if (activeTab === 'split') {
+        endpoint = '/api/pdf/split';
+        payload = { file: files[0], pages };
+      }
+
+      const res = await axios.post(endpoint, payload);
+      setResult(res.data.result);
+    } catch (err) {
+      console.error('PDF processing failed:', err);
+      setError(err.response?.data?.error || err.message || 'Processing failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderContent = () => {
+    return (
+      <div className="space-y-4 mt-6">
+        <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-indigo-400 hover:bg-indigo-50 transition-all cursor-pointer relative group">
+          <input
+            type="file"
+            accept=".pdf"
+            multiple={activeTab === 'merge'}
+            onChange={handleFileChange}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+          <div className="bg-white p-3 rounded-full shadow-sm mb-3 group-hover:scale-110 transition-transform">
+            <Upload className="w-6 h-6 text-indigo-500" />
+          </div>
+          <p className="text-slate-600 font-medium text-sm">
+            {files.length > 0 ? `${files.length} file(s) selected` : t('pdf_upload_hint')}
+          </p>
+        </div>
+
+        {activeTab === 'split' && (
+           <div>
+             <label className="block text-sm font-medium text-slate-700 mb-1">{t('pdf_pages_hint')}</label>
+             <input
+               type="text"
+               value={pages}
+               onChange={(e) => setPages(e.target.value)}
+               placeholder="1-2,5"
+               className="w-full p-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500"
+             />
+           </div>
+        )}
+
+        <button
+          onClick={handleProcess}
+          disabled={loading || files.length === 0 || (activeTab === 'split' && !pages)}
+          className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+        >
+          {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+          {loading ? t('pdf_processing') : 
+            activeTab === 'convert' ? t('pdf_convert_btn') :
+            activeTab === 'merge' ? t('pdf_merge_btn') : t('pdf_split_btn')
+          }
+        </button>
+
+        {error && (
+          <div className="p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100">
+            {error}
+          </div>
+        )}
+
+        {result && (
+          <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+             <label className="block text-sm font-medium text-slate-700 mb-2">Result</label>
+             {activeTab === 'convert' ? (
+                <div className="whitespace-pre-wrap text-sm text-slate-700 max-h-60 overflow-y-auto">
+                  {result}
+                </div>
+             ) : (
+                <div className="space-y-2">
+                   {Array.isArray(result) ? result.map((url, idx) => (
+                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 hover:underline text-sm">
+                        <Download className="w-4 h-4" /> Part {idx + 1}
+                      </a>
+                   )) : (
+                      <a href={result} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 hover:underline text-sm">
+                        <Download className="w-4 h-4" /> Download Result
+                      </a>
+                   )}
+                </div>
+             )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-red-500" />
+          {t('pdf_tools_title')}
+        </h3>
+        <p className="text-slate-500 text-sm">
+          {t('pdf_tools_desc')}
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => { setActiveTab('convert'); setFiles([]); setResult(null); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'convert' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          {t('pdf_tab_convert')}
+        </button>
+        <button
+          onClick={() => { setActiveTab('merge'); setFiles([]); setResult(null); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'merge' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          {t('pdf_tab_merge')}
+        </button>
+        <button
+          onClick={() => { setActiveTab('split'); setFiles([]); setResult(null); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'split' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          {t('pdf_tab_split')}
+        </button>
+      </div>
+
+      {renderContent()}
+    </div>
+  );
+};
+
 // --- Main Toolbox Layout ---
 
 const Toolbox = () => {
@@ -567,16 +849,22 @@ const Toolbox = () => {
       color: 'text-green-500'
     },
     {
-      id: 'json',
-      name: t('json_fmt_title'),
-      icon: <FileJson className="w-5 h-5" />,
-      color: 'text-blue-500'
-    },
-    {
       id: 'image',
       name: t('img_resizer_title'),
       icon: <ImageIcon className="w-5 h-5" />,
       color: 'text-purple-500'
+    },
+    {
+      id: 'pdf',
+      name: t('pdf_tools_title'),
+      icon: <FileText className="w-5 h-5" />,
+      color: 'text-red-500'
+    },
+    {
+      id: 'excel',
+      name: t('excel_tools_title'),
+      icon: <Sheet className="w-5 h-5" />,
+      color: 'text-green-600'
     }
   ];
 
@@ -611,8 +899,9 @@ const Toolbox = () => {
         <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8">
           {activeTool === 'prompt' && <PromptGenerator />}
           {activeTool === 'ocr' && <ImageOcrTranslator />}
-          {activeTool === 'json' && <JsonFormatter />}
           {activeTool === 'image' && <ImageResizer />}
+          {activeTool === 'pdf' && <PdfTools />}
+          {activeTool === 'excel' && <ExcelTools />}
         </div>
       </div>
     </div>

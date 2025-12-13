@@ -31,7 +31,7 @@ const ToolIcon = ({ tool }) => {
   return (
     <div className="w-12 h-12 bg-white rounded-lg border border-slate-100 flex items-center justify-center overflow-hidden shrink-0 p-1">
       <img 
-        src={`/api/logo?url=${encodeURIComponent(tool.url)}&name=${encodeURIComponent(tool.name)}`} 
+        src={`/api/nav/logo?url=${encodeURIComponent(tool.url)}&name=${encodeURIComponent(tool.name)}`} 
         alt={tool.name}
         className="w-full h-full object-contain"
         onError={() => setError(true)}
@@ -59,8 +59,8 @@ function App() {
     setLoading(true)
     try {
       try {
-        // 使用 /api/trending 获取每日热门工具
-        const res = await axios.get('/api/trending')
+        // 使用 /api/nav/trending 获取每日热门工具
+        const res = await axios.get('/api/nav/trending')
         if (Array.isArray(res.data) && res.data.length > 0) {
           setTools(res.data)
           return
@@ -71,7 +71,7 @@ function App() {
 
       // Fallback: 如果 trending 失败或为空，获取静态全量列表
       try {
-        const res = await axios.get('/api/tools')
+        const res = await axios.get('/api/nav/tools')
         setTools(res.data)
       } catch (error) {
         console.error('Error fetching static tools:', error)
@@ -91,7 +91,7 @@ function App() {
     initRef.current = true;
 
     try {
-      const res = await axios.get('/api/location');
+      const res = await axios.get('/api/nav/location');
       const { country } = res.data;
       console.log('Detected IP Country:', country);
 
@@ -116,7 +116,7 @@ function App() {
     e.preventDefault()
     setLoading(true)
     try {
-      const res = await axios.post('/api/search', { query })
+      const res = await axios.post('/api/nav/search', { query })
       setTools(res.data)
     } catch (error) {
       console.error('Error searching tools:', error)
