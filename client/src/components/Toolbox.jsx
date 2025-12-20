@@ -1348,6 +1348,178 @@ const DataAnalysis = () => {
   );
 };
 
+const JsonNode = ({ name, value, isLast }) => {
+  const [expanded, setExpanded] = useState(true);
+  const isObject = value !== null && typeof value === 'object';
+  const isArray = Array.isArray(value);
+  const isEmpty = isObject && Object.keys(value).length === 0;
+
+  const toggle = (e) => {
+    e.stopPropagation();
+    setExpanded(!expanded);
+  };
+
+  const renderValue = (val) => {
+    if (val === null) return <span className="text-gray-400">null</span>;
+    if (typeof val === 'boolean') return <span className="text-purple-600">{String(val)}</span>;
+    if (typeof val === 'number') return <span className="text-blue-600">{val}</span>;
+    if (typeof val === 'string') return <span className="text-green-600">"{val}"</span>;
+    return <span>{String(val)}</span>;
+  };
+
+  if (!isObject) {
+    return (
+      <div className="font-mono text-sm leading-6 hover:bg-slate-100 px-1 rounded">
+        {name && <span className="text-purple-800 font-semibold">"{name}": </span>}
+        {renderValue(value)}
+        {!isLast && ","}
+      </div>
+    );
+  }
+
+  return (
+    <div className="font-mono text-sm leading-6">
+      <div className="flex items-start hover:bg-slate-100 px-1 rounded">
+        <span 
+          onClick={!isEmpty ? toggle : undefined} 
+          className={`cursor-pointer mr-1 select-none text-slate-400 hover:text-slate-600 w-4 inline-block text-center ${isEmpty ? 'invisible' : ''}`}
+        >
+          {expanded ? '▼' : '▶'}
+        </span>
+        <div>
+          {name && <span className="text-purple-800 font-semibold">"{name}": </span>}
+          <span>{isArray ? '[' : '{'}</span>
+          {!expanded && <span onClick={toggle} className="text-slate-400 cursor-pointer select-none mx-1">
+            {isArray ? `Array[${Object.keys(value).length}]` : `Object{${Object.keys(value).length}}`}
+          </span>}
+          {!expanded && <span>{isArray ? ']' : '}'}{!isLast && ","}</span>}
+        </div>
+      </div>
+      
+      {expanded && !isEmpty && (
+        <div className="pl-6 border-l border-slate-200 ml-2">
+          {Object.entries(value).map(([key, val], idx, arr) => (
+            <JsonNode 
+              key={key} 
+              name={isArray ? null : key} 
+              value={val} 
+              isLast={idx === arr.length - 1} 
+            />
+          ))}
+        </div>
+      )}
+      
+      {expanded && (
+        <div className="pl-6 ml-2">
+          <span>{isArray ? ']' : '}'}{!isLast && ","}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const JsonEditor = () => {
+  const { t } = useTranslation();
+  const [input, setInput] = useState('');
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!input.trim()) {
+      setParsed(null);
+      setError(null);
+      return;
+    }
+    try {
+      const json = JSON.parse(input);
+      setParsed(json);
+      setError(null);
+    } catch (e) {
+      // Don't set error immediately while typing to avoid annoyance, 
+      // but keep old parsed if possible? No, clear parsed if invalid to avoid mismatch.
+      // But clearing parsed makes the tree disappear while typing.
+      // Let's only set error, keep parsed if we want? 
+      // json.cn keeps the tree until valid again? No, it updates in real time.
+      // If invalid, maybe just don't update parsed?
+    }
+  }, [input]);
+
+  const handleFormat = () => {
+    try {
+      const json = JSON.parse(input);
+      setInput(JSON.stringify(json, null, 2));
+      setParsed(json);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleMinify = () => {
+    try {
+      const json = JSON.parse(input);
+      setInput(JSON.stringify(json));
+      setParsed(json);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleValidate = () => {
+    try {
+      JSON.parse(input);
+      setError(null);
+      alert(t('json_valid'));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6 h-[calc(100vh-200px)] flex flex-col">
+      <div>
+        <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+          <Code className="w-5 h-5 text-indigo-600" />
+          {t('json_editor_title')}
+        </h3>
+        <p className="text-slate-500 text-sm">
+          {t('json_editor_desc')}
+        </p>
+      </div>
+
+      <div className="flex gap-2 mb-2">
+        <button onClick={handleFormat} className="px-3 py-1.5 text-sm bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 transition-colors">{t('json_format')}</button>
+        <button onClick={handleMinify} className="px-3 py-1.5 text-sm bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 transition-colors">{t('json_minify')}</button>
+        <button onClick={handleValidate} className="px-3 py-1.5 text-sm bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors">{t('json_validate')}</button>
+      </div>
+
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
+        <div className="flex flex-col h-full">
+           <textarea
+             value={input}
+             onChange={(e) => setInput(e.target.value)}
+             className="flex-1 w-full p-4 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+             placeholder='{"key": "value"}'
+             spellCheck="false"
+           />
+           {error && <div className="mt-2 text-red-500 text-xs">{error}</div>}
+        </div>
+        
+        <div className="h-full border border-slate-300 rounded-lg bg-slate-50 overflow-auto p-4">
+           {parsed ? (
+             <JsonNode value={parsed} isLast={true} />
+           ) : (
+             <div className="text-slate-400 text-sm text-center mt-10">
+               {error ? <span className="text-red-400">{error}</span> : t('result_placeholder')}
+             </div>
+           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Main Toolbox Layout ---
 
 const Toolbox = () => {

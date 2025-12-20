@@ -97,7 +97,15 @@ const resources = {
       "analysis_intent": "Analysis Intent",
       "analysis_result_data": "Analysis Result Data",
       "copy_table": "Copy Table Data",
-      "copy_analysis": "Copy Analysis"
+      "copy_analysis": "Copy Analysis",
+
+      "json_editor_title": "JSON Editor",
+      "json_editor_desc": "Format, validate, and view JSON data with a tree view.",
+      "json_format": "Format",
+      "json_minify": "Minify",
+      "json_validate": "Validate",
+      "json_invalid": "Invalid JSON",
+      "json_valid": "Valid JSON"
     }
   },
   zh: {
@@ -194,7 +202,15 @@ const resources = {
       "analysis_intent": "分析意图",
       "analysis_result_data": "分析结果数据",
       "copy_table": "复制表格数据",
-      "copy_analysis": "复制分析结果"
+      "copy_analysis": "复制分析结果",
+
+      "json_editor_title": "JSON 编辑器",
+      "json_editor_desc": "在线格式化、压缩、验证 JSON 数据，支持树形视图。",
+      "json_format": "格式化",
+      "json_minify": "压缩",
+      "json_validate": "验证",
+      "json_invalid": "JSON 格式无效",
+      "json_valid": "JSON 格式有效"
     }
   }
 };

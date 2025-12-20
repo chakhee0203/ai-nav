@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Search, Sparkles, ExternalLink, Bot, Code, Image as ImageIcon, PenTool, Video, Globe, Navigation, Wrench } from 'lucide-react'
 import StarryLoading from './components/StarryLoading'
 import Toolbox from './components/Toolbox'
+import JsonEditor from './components/JsonEditor'
 
 // 辅助函数：根据类别返回图标
 const getCategoryIcon = (category) => {
@@ -46,7 +47,7 @@ function App() {
   const [tools, setTools] = useState([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState('nav') // 'nav' | 'toolbox'
+  const [activeTab, setActiveTab] = useState('nav') // 'nav' | 'toolbox' | 'json'
   const initRef = useRef(false)
 
   useEffect(() => {
@@ -153,7 +154,7 @@ function App() {
                 {t('brand_name')}
               </h1>
               <span className="text-sm text-slate-400 font-medium px-2 py-0.5 bg-slate-100 rounded-full">
-                {activeTab === 'nav' ? t('nav_station') : t('toolbox')}
+                {activeTab === 'nav' ? t('nav_station') : (activeTab === 'toolbox' ? t('toolbox') : t('json_editor_title'))}
               </span>
             </div>
 
@@ -180,6 +181,17 @@ function App() {
               >
                 <Wrench className="w-4 h-4" />
                 <span>{t('toolbox')}</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('json')}
+                className={`flex items-center space-x-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  activeTab === 'json' 
+                    ? 'bg-white text-indigo-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Code className="w-4 h-4" />
+                <span>JSON</span>
               </button>
             </div>
 
@@ -303,8 +315,10 @@ function App() {
             </div>
           )}
         </main>
-      ) : (
+      ) : activeTab === 'toolbox' ? (
         <Toolbox />
+      ) : (
+        <JsonEditor />
       )}
     </div>
   )
