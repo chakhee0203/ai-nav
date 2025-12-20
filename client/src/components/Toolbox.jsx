@@ -1016,12 +1016,36 @@ const DataAnalysis = () => {
         requirements,
         lang: i18n.language
       });
+
+      let responseData = res.data;
+      // Handle case where response might be a string (e.g. some proxy issues)
+      if (typeof responseData === 'string') {
+        try {
+            responseData = JSON.parse(responseData);
+        } catch (e) {
+            console.error('Failed to parse response string:', e);
+        }
+      }
+
       // Backend now returns { results: [...] }
-      if (res.data.results && Array.isArray(res.data.results)) {
-        setResults(res.data.results);
-      } else if (res.data.analysis) {
+      if (responseData.results && Array.isArray(responseData.results)) {
+        setResults(responseData.results);
+      } else if (responseData.analysis) {
         // Fallback for backward compatibility or single result structure
-        setResults([{ sheetName: 'Result', ...res.data }]);
+        setResults([{ sheetName: 'Result', ...responseData }]);
+      } else {
+        // Fallback: Try to display whatever we got to help debugging
+        console.warn('Unexpected response structure:', responseData);
+        if (Array.isArray(responseData)) {
+             setResults(responseData);
+        } else {
+             // Create a dummy result to show the error/data
+             setResults([{ 
+                 sheetName: 'Debug Info', 
+                 analysis: typeof responseData === 'object' ? JSON.stringify(responseData, null, 2) : String(responseData),
+                 intent: 'Debug: Unexpected Response Format'
+             }]);
+        }
       }
     } catch (err) {
       console.error('Analysis failed:', err);
