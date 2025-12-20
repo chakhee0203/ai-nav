@@ -3,11 +3,136 @@ import { useTranslation } from 'react-i18next';
 import { 
   Wrench, Zap, Image as ImageIcon, 
   ArrowRight, Copy, Download, Upload, RefreshCw, Check,
-  Scan, FileText, Layers, Scissors, Sheet, FileSpreadsheet
+  Scan, FileText, Layers, Scissors, Sheet, FileSpreadsheet, BarChart2
 } from 'lucide-react';
 import axios from 'axios';
+import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
+
+// --- Error Boundary ---
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 bg-red-50 border border-red-200 rounded-lg text-red-700 flex flex-col items-center text-center">
+          <h3 className="font-bold mb-2 text-lg">Something went wrong</h3>
+          <p className="text-sm mb-4">The application encountered an error while rendering this component.</p>
+          <div className="bg-white p-3 rounded border border-red-100 w-full text-left overflow-auto max-h-40 font-mono text-xs">
+            {this.state.error && this.state.error.toString()}
+          </div>
+          <button 
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // --- Sub-components for each tool ---
+
+const DataTable = ({ data, title }) => {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const handleCopy = () => {
+    try {
+      const headers = Object.keys(data[0]);
+      const csvContent = [
+        headers.join('\t'),
+        ...data.map(row => headers.map(header => {
+          const val = row[header];
+          return val === null || val === undefined ? '' : String(val).replace(/\t/g, ' ').replace(/\n/g, ' ');
+        }).join('\t'))
+      ].join('\n');
+
+      navigator.clipboard.writeText(csvContent).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    } catch (err) {
+      console.error('Copy failed', err);
+    }
+  };
+
+  try {
+    // Validate first item
+    if (typeof data[0] !== 'object' || data[0] === null) {
+      return <div className="text-slate-400 text-sm p-2">Invalid data format for table.</div>;
+    }
+    
+    const columns = Object.keys(data[0]);
+    if (columns.length === 0) {
+      return <div className="text-slate-400 text-sm p-2">No columns to display.</div>;
+    }
+
+    return (
+      <div className="mt-8 border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
+           <h4 className="font-bold text-slate-700 text-sm">{title || t('data_preview', 'Data Preview')}</h4>
+           <button 
+             onClick={handleCopy}
+             className="text-xs flex items-center gap-1 text-slate-500 hover:text-green-600 transition-colors px-2 py-1 rounded hover:bg-slate-100"
+             title={t('copy_table', 'Copy Table Data')}
+           >
+             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+             {copied ? t('copied', 'Copied!') : t('copy', 'Copy')}
+           </button>
+        </div>
+        <div className="overflow-x-auto max-h-[500px]">
+          <table className="w-full text-sm text-left text-slate-600">
+            <thead className="text-xs text-slate-700 uppercase bg-slate-50 sticky top-0 z-10 shadow-sm">
+              <tr>
+                {columns.map((col) => (
+                  <th key={col} className="px-6 py-3 border-b border-slate-200 whitespace-nowrap">
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row, index) => (
+                <tr key={index} className="bg-white border-b hover:bg-slate-50">
+                  {columns.map((col) => (
+                    <td key={`${index}-${col}`} className="px-6 py-4 border-b border-slate-100 whitespace-nowrap">
+                      {/* Handle non-string values safely */}
+                      {row[col] !== null && row[col] !== undefined ? String(row[col]) : ''}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  } catch (e) {
+    console.error("Table rendering error:", e);
+    return <div className="text-red-500 text-sm p-4">Error rendering data table.</div>;
+  }
+};
 
 const ExcelTools = () => {
   const { t } = useTranslation();
@@ -856,6 +981,247 @@ const PdfTools = () => {
   );
 };
 
+const DataAnalysis = () => {
+  const { t, i18n } = useTranslation();
+  const [file, setFile] = useState(null);
+  const [requirements, setRequirements] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [analysisCopied, setAnalysisCopied] = useState(false);
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFile(event.target.result); // Base64
+      };
+      reader.readAsDataURL(selectedFile);
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const res = await axios.post('/api/analysis', {
+        file,
+        requirements,
+        lang: i18n.language
+      });
+      setResult(res.data);
+    } catch (err) {
+      console.error('Analysis failed:', err);
+      setError(err.response?.data?.error || err.message || 'Analysis failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderChart = (chart) => {
+    if (!chart || !chart.type || !Array.isArray(chart.data) || chart.data.length === 0) {
+      return (
+        <div className="w-full h-[400px] mt-4 flex items-center justify-center bg-slate-50 rounded-lg border border-slate-200 text-slate-400">
+           <p className="text-sm">Chart data unavailable</p>
+        </div>
+      );
+    }
+
+    const { type, data, xAxisKey, seriesKey, labelKey, title } = chart;
+    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
+    try {
+      return (
+        <div className="w-full h-[400px] mt-4">
+          <h4 className="text-center font-bold mb-2 text-slate-700">{title}</h4>
+          <ResponsiveContainer width="100%" height="100%">
+            {type === 'bar' && (
+              <BarChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey={xAxisKey} />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                {Array.isArray(seriesKey) ? seriesKey.map((key, index) => (
+                    <Bar key={key} dataKey={key} fill={COLORS[index % COLORS.length]} />
+                )) : <Bar dataKey={seriesKey || 'value'} fill="#8884d8" />}
+              </BarChart>
+            )}
+            {type === 'line' && (
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey={xAxisKey} />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                {Array.isArray(seriesKey) ? seriesKey.map((key, index) => (
+                    <Line key={key} type="monotone" dataKey={key} stroke={COLORS[index % COLORS.length]} />
+                )) : <Line type="monotone" dataKey={seriesKey || 'value'} stroke="#8884d8" />}
+              </LineChart>
+            )}
+            {type === 'pie' && (
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={120}
+                  fill="#8884d8"
+                  dataKey={seriesKey || 'value'}
+                  nameKey={labelKey || 'name'}
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+      );
+    } catch (e) {
+      console.error("Chart rendering error:", e);
+      return <div className="text-red-500 text-sm p-4">Error rendering chart.</div>;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+          <BarChart2 className="w-5 h-5 text-blue-500" />
+          {t('analysis_title')}
+        </h3>
+        <p className="text-slate-500 text-sm">
+          {t('analysis_desc')}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer relative group min-h-[200px]">
+            <input
+              type="file"
+              accept=".xlsx,.csv"
+              onChange={handleFileChange}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+            <div className="bg-white p-3 rounded-full shadow-sm mb-3 group-hover:scale-110 transition-transform">
+              {file ? (
+                <Check className="w-6 h-6 text-blue-500" />
+              ) : (
+                <Upload className="w-6 h-6 text-blue-500" />
+              )}
+            </div>
+            <p className="text-slate-600 font-medium text-sm">
+              {file ? t('file_selected', { count: 1 }) : t('upload_text')}
+            </p>
+            <p className="text-slate-400 text-xs mt-1">
+              {t('analysis_upload_hint')}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                {t('analysis_requirements')}
+              </label>
+              <textarea
+                value={requirements}
+                onChange={(e) => setRequirements(e.target.value)}
+                placeholder={t('analysis_placeholder')}
+                className="w-full h-32 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              />
+            </div>
+
+            <button
+              onClick={handleAnalyze}
+              disabled={!file || loading}
+              className={`w-full py-2.5 px-4 rounded-lg font-medium text-white transition-all flex items-center justify-center gap-2 ${
+                !file || loading
+                  ? 'bg-slate-300 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-sm hover:shadow'
+              }`}
+            >
+              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              {loading ? t('analyzing') : t('analyze_btn')}
+            </button>
+            
+            {error && (
+              <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 flex flex-col relative min-h-[400px]">
+          {result ? (
+            <div className="flex flex-col h-full gap-4 overflow-auto">
+              <h4 className="text-lg font-medium text-slate-800 flex items-center gap-2">
+                 <Check className="w-5 h-5 text-green-500" />
+                 {t('analysis_result')}
+              </h4>
+
+              {result.intent && (
+                <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg text-sm text-blue-800 flex items-start gap-2">
+                  <Zap className="w-4 h-4 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold block mb-1">{t('analysis_intent', 'Analysis Intent')}:</span>
+                    {result.intent}
+                  </div>
+                </div>
+              )}
+              
+              <div className="relative group">
+                <div className="prose prose-sm max-w-none text-slate-600 bg-white p-4 rounded-lg border border-slate-200">
+                  <p className="whitespace-pre-wrap">
+                    {typeof result.analysis === 'string' ? result.analysis : JSON.stringify(result.analysis, null, 2)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const text = typeof result.analysis === 'string' ? result.analysis : JSON.stringify(result.analysis, null, 2);
+                    navigator.clipboard.writeText(text).then(() => {
+                      setAnalysisCopied(true);
+                      setTimeout(() => setAnalysisCopied(false), 2000);
+                    });
+                  }}
+                  className="absolute top-2 right-2 p-1.5 bg-white border border-slate-200 rounded shadow-sm text-slate-400 hover:text-green-600 opacity-0 group-hover:opacity-100 transition-all"
+                  title={t('copy_analysis', 'Copy Analysis')}
+                >
+                  {analysisCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {result.chart && renderChart(result.chart)}
+              
+              {result.chart && result.chart.data && (
+                <DataTable 
+                  data={result.chart.data} 
+                  title={t('analysis_result_data', 'Analysis Result Data')} 
+                />
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+              <BarChart2 className="w-12 h-12 mb-2 opacity-20" />
+              <p className="text-sm">{t('result_placeholder')}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Main Toolbox Layout ---
 
 const Toolbox = () => {
@@ -892,6 +1258,12 @@ const Toolbox = () => {
       name: t('excel_tools_title'),
       icon: <Sheet className="w-5 h-5" />,
       color: 'text-green-600'
+    },
+    {
+      id: 'analysis',
+      name: t('analysis_title'),
+      icon: <BarChart2 className="w-5 h-5" />,
+      color: 'text-blue-500'
     }
   ];
 
@@ -929,6 +1301,11 @@ const Toolbox = () => {
           {activeTool === 'image' && <ImageResizer />}
           {activeTool === 'pdf' && <PdfTools />}
           {activeTool === 'excel' && <ExcelTools />}
+          {activeTool === 'analysis' && (
+            <ErrorBoundary>
+              <DataAnalysis />
+            </ErrorBoundary>
+          )}
         </div>
       </div>
     </div>

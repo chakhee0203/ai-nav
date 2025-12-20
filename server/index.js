@@ -23,6 +23,7 @@ const navRoutes = require('./routes/nav');
 const toolRoutes = require('./routes/tools');
 const pdfRoutes = require('./routes/pdf');
 const excelRoutes = require('./routes/excel');
+const analysisRoutes = require('./routes/analysis');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +45,7 @@ app.use('/api/nav', navRoutes);
 app.use('/api/tools', toolRoutes);
 app.use('/api/pdf', pdfRoutes);
 app.use('/api/excel', excelRoutes);
+app.use('/api/analysis', analysisRoutes);
 
 // Serve static files from the React client
 // Strategy: Find where index.html is located

@@ -84,7 +84,20 @@ const resources = {
       "download_file": "Download File",
       "result_placeholder": "Result will appear here",
       "invalid_file_type": "Invalid file type",
-      "pdf_pages_optional": "Pages (Optional)"
+      "pdf_pages_optional": "Pages (Optional)",
+
+      "analysis_title": "Data Analysis",
+      "analysis_desc": "Upload Excel/CSV files, get AI-powered analysis and charts.",
+      "analysis_upload_hint": "Supports .xlsx, .csv",
+      "analysis_requirements": "Analysis Requirements (Optional)",
+      "analysis_placeholder": "e.g., Show me the sales trend over time, or compare revenue by region.",
+      "analyze_btn": "Analyze Data",
+      "analyzing": "Analyzing...",
+      "analysis_result": "Analysis Result",
+      "analysis_intent": "Analysis Intent",
+      "analysis_result_data": "Analysis Result Data",
+      "copy_table": "Copy Table Data",
+      "copy_analysis": "Copy Analysis"
     }
   },
   zh: {
@@ -168,7 +181,20 @@ const resources = {
       "download_file": "下载文件",
       "result_placeholder": "处理结果将显示在这里",
       "invalid_file_type": "文件类型无效",
-      "pdf_pages_optional": "页码范围（可选）"
+      "pdf_pages_optional": "页码范围（可选）",
+
+      "analysis_title": "数据分析",
+      "analysis_desc": "上传 Excel/CSV 文件，获取 AI 智能分析和可视化图表。",
+      "analysis_upload_hint": "支持 .xlsx, .csv",
+      "analysis_requirements": "分析需求（可选）",
+      "analysis_placeholder": "例如：展示销售额随时间的变化趋势，或对比不同地区的收入。",
+      "analyze_btn": "开始分析",
+      "analyzing": "分析中...",
+      "analysis_result": "分析结果",
+      "analysis_intent": "分析意图",
+      "analysis_result_data": "分析结果数据",
+      "copy_table": "复制表格数据",
+      "copy_analysis": "复制分析结果"
     }
   }
 };
