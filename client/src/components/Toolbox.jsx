@@ -10,6 +10,7 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
+import * as XLSX from 'xlsx';
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component {
@@ -985,7 +986,8 @@ const DataAnalysis = () => {
   const { t, i18n } = useTranslation();
   const [file, setFile] = useState(null);
   const [requirements, setRequirements] = useState('');
-  const [result, setResult] = useState(null);
+  const [results, setResults] = useState(null); // Changed from result to results (array)
+  const [activeSheetIndex, setActiveSheetIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [analysisCopied, setAnalysisCopied] = useState(false);
@@ -1005,7 +1007,8 @@ const DataAnalysis = () => {
     if (!file) return;
     setLoading(true);
     setError(null);
-    setResult(null);
+    setResults(null);
+    setActiveSheetIndex(0);
 
     try {
       const res = await axios.post('/api/analysis', {
@@ -1013,12 +1016,68 @@ const DataAnalysis = () => {
         requirements,
         lang: i18n.language
       });
-      setResult(res.data);
+      // Backend now returns { results: [...] }
+      if (res.data.results && Array.isArray(res.data.results)) {
+        setResults(res.data.results);
+      } else if (res.data.analysis) {
+        // Fallback for backward compatibility or single result structure
+        setResults([{ sheetName: 'Result', ...res.data }]);
+      }
     } catch (err) {
       console.error('Analysis failed:', err);
       setError(err.response?.data?.error || err.message || 'Analysis failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadReport = () => {
+    if (!results || results.length === 0) return;
+
+    try {
+      const workbook = XLSX.utils.book_new();
+      
+      results.forEach((sheetResult) => {
+        let sheetName = sheetResult.sheetName || 'Result';
+        // Sanitize sheet name (max 31 chars, no invalid chars)
+        sheetName = sheetName.replace(/[\\/?*[\]]/g, '').substring(0, 31);
+        
+        // 1. Add Analysis Text Sheet
+        const analysisData = [
+            ['Analysis Intent', sheetResult.intent || ''],
+            ['Analysis Summary'],
+            [sheetResult.analysis || 'No data available']
+        ];
+        const analysisSheet = XLSX.utils.aoa_to_sheet(analysisData);
+        
+        let finalAnalysisSheetName = `${sheetName}-Analysis`.substring(0, 31);
+        // Ensure unique name
+        let counter = 1;
+        while (workbook.Sheets[finalAnalysisSheetName]) {
+             finalAnalysisSheetName = `${sheetName.substring(0, 25)}-Ana${counter}`;
+             counter++;
+        }
+        XLSX.utils.book_append_sheet(workbook, analysisSheet, finalAnalysisSheetName);
+
+        // 2. Add Chart Data Sheet (if available)
+        if (sheetResult.chart && Array.isArray(sheetResult.chart.data) && sheetResult.chart.data.length > 0) {
+           const dataSheet = XLSX.utils.json_to_sheet(sheetResult.chart.data);
+           
+           let finalDataSheetName = `${sheetName}-Data`.substring(0, 31);
+           // Ensure unique name
+           counter = 1;
+           while (workbook.Sheets[finalDataSheetName]) {
+             finalDataSheetName = `${sheetName.substring(0, 25)}-Dat${counter}`;
+             counter++;
+           }
+           XLSX.utils.book_append_sheet(workbook, dataSheet, finalDataSheetName);
+        }
+      });
+
+      XLSX.writeFile(workbook, `Analysis_Result_${new Date().toISOString().slice(0,10)}.xlsx`);
+    } catch (err) {
+      console.error("Download failed:", err);
+      setError("Failed to generate Excel file.");
     }
   };
 
@@ -1092,6 +1151,8 @@ const DataAnalysis = () => {
     }
   };
 
+  const activeResult = results ? results[activeSheetIndex] : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -1163,51 +1224,92 @@ const DataAnalysis = () => {
         </div>
 
         <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 flex flex-col relative min-h-[400px]">
-          {result ? (
+          {results && results.length > 0 ? (
             <div className="flex flex-col h-full gap-4 overflow-auto">
-              <h4 className="text-lg font-medium text-slate-800 flex items-center gap-2">
-                 <Check className="w-5 h-5 text-green-500" />
-                 {t('analysis_result')}
-              </h4>
-
-              {result.intent && (
-                <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg text-sm text-blue-800 flex items-start gap-2">
-                  <Zap className="w-4 h-4 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="font-semibold block mb-1">{t('analysis_intent', 'Analysis Intent')}:</span>
-                    {result.intent}
-                  </div>
-                </div>
-              )}
-              
-              <div className="relative group">
-                <div className="prose prose-sm max-w-none text-slate-600 bg-white p-4 rounded-lg border border-slate-200">
-                  <p className="whitespace-pre-wrap">
-                    {typeof result.analysis === 'string' ? result.analysis : JSON.stringify(result.analysis, null, 2)}
-                  </p>
-                </div>
+              <div className="flex items-center justify-between">
+                <h4 className="text-lg font-medium text-slate-800 flex items-center gap-2">
+                   <Check className="w-5 h-5 text-green-500" />
+                   {t('analysis_result')}
+                </h4>
                 <button
-                  onClick={() => {
-                    const text = typeof result.analysis === 'string' ? result.analysis : JSON.stringify(result.analysis, null, 2);
-                    navigator.clipboard.writeText(text).then(() => {
-                      setAnalysisCopied(true);
-                      setTimeout(() => setAnalysisCopied(false), 2000);
-                    });
-                  }}
-                  className="absolute top-2 right-2 p-1.5 bg-white border border-slate-200 rounded shadow-sm text-slate-400 hover:text-green-600 opacity-0 group-hover:opacity-100 transition-all"
-                  title={t('copy_analysis', 'Copy Analysis')}
+                  onClick={handleDownloadReport}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors shadow-sm"
                 >
-                  {analysisCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                  <Download className="w-4 h-4" />
+                  {t('download_btn')}
                 </button>
               </div>
 
-              {result.chart && renderChart(result.chart)}
-              
-              {result.chart && result.chart.data && (
-                <DataTable 
-                  data={result.chart.data} 
-                  title={t('analysis_result_data', 'Analysis Result Data')} 
-                />
+              {/* Sheet Tabs */}
+              {results.length > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pb-2">
+                  {results.map((res, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveSheetIndex(idx)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                        activeSheetIndex === idx
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                      }`}
+                    >
+                      {res.sheetName}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {activeResult && (
+                <>
+                  {activeResult.error ? (
+                    <div className="p-4 bg-red-50 text-red-600 rounded-lg border border-red-200">
+                      <p className="font-semibold">Analysis Failed for this Sheet</p>
+                      <p className="text-sm mt-1">{activeResult.error}</p>
+                    </div>
+                  ) : (
+                    <>
+                      {activeResult.intent && (
+                        <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg text-sm text-blue-800 flex items-start gap-2">
+                          <Zap className="w-4 h-4 mt-0.5 shrink-0" />
+                          <div>
+                            <span className="font-semibold block mb-1">{t('analysis_intent', 'Analysis Intent')}:</span>
+                            {activeResult.intent}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="relative group">
+                        <div className="prose prose-sm max-w-none text-slate-600 bg-white p-4 rounded-lg border border-slate-200">
+                          <p className="whitespace-pre-wrap">
+                            {typeof activeResult.analysis === 'string' ? activeResult.analysis : JSON.stringify(activeResult.analysis, null, 2)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                          const text = typeof activeResult.analysis === 'string' ? activeResult.analysis : JSON.stringify(activeResult.analysis, null, 2);
+                            navigator.clipboard.writeText(text).then(() => {
+                              setAnalysisCopied(true);
+                              setTimeout(() => setAnalysisCopied(false), 2000);
+                            });
+                          }}
+                          className="absolute top-2 right-2 p-1.5 bg-white border border-slate-200 rounded shadow-sm text-slate-400 hover:text-green-600 opacity-0 group-hover:opacity-100 transition-all"
+                          title={t('copy_analysis', 'Copy Analysis')}
+                        >
+                          {analysisCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+
+                      {activeResult.chart && renderChart(activeResult.chart)}
+                      
+                      {activeResult.chart && activeResult.chart.data && (
+                        <DataTable 
+                          data={activeResult.chart.data} 
+                          title={t('analysis_result_data', 'Analysis Result Data')} 
+                        />
+                      )}
+                    </>
+                  )}
+                </>
               )}
             </div>
           ) : (
