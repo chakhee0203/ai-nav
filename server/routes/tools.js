@@ -67,19 +67,37 @@ router.post('/ocr-translate', async (req, res) => {
     return res.status(503).json({ error: 'Vision AI service not configured (Missing ZHIPU_API_KEY)' });
   }
 
+  // Map simple language names to more specific instructions
+  let langInstruction = targetLang;
+  if (targetLang === 'Chinese') {
+    langInstruction = 'Simplified Chinese (简体中文)';
+  } else if (targetLang === 'Japanese') {
+    langInstruction = 'Japanese (日本語)';
+  }
+
+  console.log(`[OCR] Target Lang: ${targetLang}, Instruction: ${langInstruction}`);
+
   try {
     const systemPrompt = `
     You are a professional translator and OCR expert.
-    1. Identify ALL text in the provided image.
-    2. Translate the identified text into ${targetLang}.
-    3. Return the result using the following EXACT format (do not use JSON):
-
+    
+    TASK:
+    1. OCR: Identify ALL text in the provided image.
+    2. TRANSLATION: Translate the identified text into ${langInstruction}.
+    
+    CONSTRAINTS:
+    - Target Language: ${langInstruction}
+    - If the target language is Chinese, the result MUST be in Chinese.
+    - If the target language is Japanese, the result MUST be in Japanese.
+    - Do NOT provide the translation in English unless the target language is explicitly English.
+    
+    OUTPUT FORMAT (Strictly follow this):
     [[ORIGINAL_TEXT_START]]
-    {Put the original text here, preserving line breaks}
+    {Original text}
     [[ORIGINAL_TEXT_END]]
     
     [[TRANSLATED_TEXT_START]]
-    {Put the translated text here}
+    {Translated text in ${langInstruction}}
     [[TRANSLATED_TEXT_END]]
     `;
 
