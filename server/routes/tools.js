@@ -1,6 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { openai, zhipuClient } = require('../config/ai');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const CACHE_DIR = path.join(__dirname, '../cache/tts');
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
 
 // DeepSeek Prompt Generation API
 router.post('/generate-prompt', async (req, res) => {
@@ -175,6 +183,25 @@ router.post('/tts', async (req, res) => {
     return res.status(400).json({ error: 'Missing text' });
   }
 
+  // Check Cache
+  const cacheKey = crypto.createHash('md5').update(`${text}-${voice}-${speed}`).digest('hex');
+  const cachePath = path.join(CACHE_DIR, `${cacheKey}.wav`);
+
+  if (fs.existsSync(cachePath)) {
+    try {
+      const buffer = fs.readFileSync(cachePath);
+      console.log(`[TTS] Serving from cache: ${cacheKey}`);
+      res.set({
+        'Content-Type': 'audio/wav',
+        'Content-Length': buffer.length,
+      });
+      return res.send(buffer);
+    } catch (err) {
+      console.error('[TTS] Cache read error:', err);
+      // Fallback to API if cache read fails
+    }
+  }
+
   if (!zhipuClient) {
     return res.status(503).json({ error: 'AI service not configured (Missing ZHIPU_API_KEY)' });
   }
@@ -193,6 +220,14 @@ router.post('/tts', async (req, res) => {
     console.log(`[TTS] Success. Buffer size: ${buffer.length}`);
     console.log(`[TTS] Header (Hex): ${buffer.subarray(0, 10).toString('hex')}`);
     
+    // Save to cache
+    try {
+      fs.writeFileSync(cachePath, buffer);
+      console.log(`[TTS] Cached to: ${cacheKey}.wav`);
+    } catch (err) {
+      console.error('[TTS] Cache write error:', err);
+    }
+
     res.set({
       'Content-Type': 'audio/wav',
       'Content-Length': buffer.length,

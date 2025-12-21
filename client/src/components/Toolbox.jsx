@@ -457,7 +457,7 @@ const ImageOcrTranslator = () => {
   };
 
   const handleRecognize = async () => {
-    if (!image) return;
+    if (loading || !image) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -580,11 +580,15 @@ const ImageOcrTranslator = () => {
                <label className="block text-sm font-medium text-slate-700">{t('translated_text')}</label>
                <button 
                   onClick={() => handlePlay(result?.translatedText, true)}
-                  disabled={playingTranslated || !result?.translatedText}
+                  disabled={loadingTranslatedAudio || playingTranslated || !result?.translatedText}
                   className="text-slate-500 hover:text-indigo-600 disabled:opacity-50 transition-colors p-1"
                   title={t('read_aloud', 'Read Aloud')}
                 >
-                  <Volume2 className={`w-4 h-4 ${playingTranslated ? 'animate-pulse text-indigo-600' : ''}`} />
+                  {loadingTranslatedAudio ? (
+                    <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                  ) : (
+                    <Volume2 className={`w-4 h-4 ${playingTranslated ? 'animate-pulse text-indigo-600' : ''}`} />
+                  )}
                 </button>
              </div>
              <textarea
