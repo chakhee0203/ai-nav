@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   Wrench, Zap, Image as ImageIcon, 
   ArrowRight, Copy, Download, Upload, RefreshCw, Check,
-  Scan, FileText, Layers, Scissors, Sheet, FileSpreadsheet, BarChart2
+  Scan, FileText, Layers, Scissors, Sheet, FileSpreadsheet, BarChart2, Volume2
 } from 'lucide-react';
 import axios from 'axios';
 import {
@@ -375,6 +375,67 @@ const ImageOcrTranslator = () => {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [playingOriginal, setPlayingOriginal] = useState(false);
+  const [playingTranslated, setPlayingTranslated] = useState(false);
+  const [loadingOriginalAudio, setLoadingOriginalAudio] = useState(false);
+  const [loadingTranslatedAudio, setLoadingTranslatedAudio] = useState(false);
+
+  const handlePlay = async (text, isTranslated) => {
+    if (!text) return;
+    
+    const setLoading = isTranslated ? setLoadingTranslatedAudio : setLoadingOriginalAudio;
+    const setPlaying = isTranslated ? setPlayingTranslated : setPlayingOriginal;
+    
+    setLoading(true);
+
+    try {
+      const response = await axios.post('/api/tools/tts', {
+        text,
+        voice: 'tongtong' 
+      }, {
+        responseType: 'blob'
+      });
+
+      const audioUrl = URL.createObjectURL(response.data);
+      const audio = new Audio(audioUrl);
+      
+      // Add debug listeners
+      audio.oncanplaythrough = () => {
+        console.log('Audio ready to play');
+        setLoading(false);
+        setPlaying(true);
+      };
+      
+      audio.onplay = () => console.log('Audio started playing');
+      audio.onpause = () => console.log('Audio paused');
+
+      audio.onended = () => {
+        console.log('Audio finished');
+        setPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+      
+      audio.onerror = (e) => {
+        setLoading(false);
+        setPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+        console.error('Audio playback error', e, audio.error);
+      };
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.error("Play prevented:", error);
+          setLoading(false);
+          setPlaying(false);
+        });
+      }
+    } catch (err) {
+      console.error('TTS failed:', err);
+      setLoading(false);
+      setPlaying(false);
+    }
+  };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -492,7 +553,21 @@ const ImageOcrTranslator = () => {
         {/* Right Column: Results */}
         <div className="space-y-4">
            <div>
-             <label className="block text-sm font-medium text-slate-700 mb-1">{t('original_text')}</label>
+             <div className="flex justify-between items-center mb-1">
+               <label className="block text-sm font-medium text-slate-700">{t('original_text')}</label>
+               <button 
+                  onClick={() => handlePlay(result?.originalText, false)}
+                  disabled={loadingOriginalAudio || playingOriginal || !result?.originalText}
+                  className="text-slate-500 hover:text-indigo-600 disabled:opacity-50 transition-colors p-1"
+                  title={t('read_aloud', 'Read Aloud')}
+                >
+                  {loadingOriginalAudio ? (
+                    <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                  ) : (
+                    <Volume2 className={`w-4 h-4 ${playingOriginal ? 'animate-pulse text-indigo-600' : ''}`} />
+                  )}
+                </button>
+             </div>
              <textarea
                readOnly
                value={result?.originalText || ''}
@@ -501,7 +576,17 @@ const ImageOcrTranslator = () => {
              />
            </div>
            <div>
-             <label className="block text-sm font-medium text-slate-700 mb-1">{t('translated_text')}</label>
+             <div className="flex justify-between items-center mb-1">
+               <label className="block text-sm font-medium text-slate-700">{t('translated_text')}</label>
+               <button 
+                  onClick={() => handlePlay(result?.translatedText, true)}
+                  disabled={playingTranslated || !result?.translatedText}
+                  className="text-slate-500 hover:text-indigo-600 disabled:opacity-50 transition-colors p-1"
+                  title={t('read_aloud', 'Read Aloud')}
+                >
+                  <Volume2 className={`w-4 h-4 ${playingTranslated ? 'animate-pulse text-indigo-600' : ''}`} />
+                </button>
+             </div>
              <textarea
                readOnly
                value={result?.translatedText || ''}

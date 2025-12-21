@@ -167,4 +167,44 @@ router.post('/ocr-translate', async (req, res) => {
   }
 });
 
+// Text-to-Speech API
+router.post('/tts', async (req, res) => {
+  const { text, voice = 'tongtong', speed = 1.0 } = req.body;
+
+  if (!text) {
+    return res.status(400).json({ error: 'Missing text' });
+  }
+
+  if (!zhipuClient) {
+    return res.status(503).json({ error: 'AI service not configured (Missing ZHIPU_API_KEY)' });
+  }
+
+  try {
+    console.log(`[TTS] Request: "${text.substring(0, 20)}..." Voice: ${voice}`);
+    const mp3 = await zhipuClient.audio.speech.create({
+      model: "glm-tts",
+      input: text,
+      voice: voice,
+      speed: speed,
+      response_format: 'wav'
+    });
+
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    console.log(`[TTS] Success. Buffer size: ${buffer.length}`);
+    console.log(`[TTS] Header (Hex): ${buffer.subarray(0, 10).toString('hex')}`);
+    
+    res.set({
+      'Content-Type': 'audio/wav',
+      'Content-Length': buffer.length,
+    });
+    
+    res.send(buffer);
+
+  } catch (error) {
+    console.error('TTS Error:', error);
+    const errorMessage = error.response?.data?.error?.message || error.message || 'Failed to generate speech';
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
 module.exports = router;
