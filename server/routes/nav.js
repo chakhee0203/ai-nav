@@ -10,9 +10,9 @@ const tools = require('../data');
 const { openai } = require('../config/ai');
 
 // 配置目录
-const CACHE_DIR = process.env.VERCEL ? '/tmp/cache' : path.join(__dirname, '../cache');
+const CACHE_DIR = (process.env.VERCEL || process.env.ZEABUR) ? '/tmp/cache' : path.join(__dirname, '../cache');
 const TRENDING_CACHE_FILE = path.join(CACHE_DIR, 'daily_trends.json');
-const LOGO_DIR = process.env.VERCEL ? '/tmp/logos' : path.join(__dirname, '../public/logos');
+const LOGO_DIR = (process.env.VERCEL || process.env.ZEABUR) ? '/tmp/logos' : path.join(__dirname, '../public/logos');
 
 // Ensure directories exist
 if (!fs.existsSync(CACHE_DIR)) {

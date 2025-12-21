@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const CACHE_DIR = path.join(__dirname, '../cache/tts');
+const CACHE_DIR = (process.env.VERCEL || process.env.ZEABUR) ? '/tmp/cache/tts' : path.join(__dirname, '../cache/tts');
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }

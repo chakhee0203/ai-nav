@@ -27,7 +27,7 @@ const analysisRoutes = require('./routes/analysis');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const LOGO_DIR = process.env.VERCEL ? '/tmp/logos' : path.join(__dirname, 'public/logos');
+const LOGO_DIR = (process.env.VERCEL || process.env.ZEABUR) ? '/tmp/logos' : path.join(__dirname, 'public/logos');
 
 // Ensure directories exist
 if (!fs.existsSync(LOGO_DIR)) {
