@@ -157,20 +157,20 @@ const IntelligenceStation = () => {
   const MarketCard = ({ title, price, change, icon, color }) => {
     const isUp = parseFloat(change) >= 0;
     return (
-      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-4 rounded-xl flex items-center justify-between hover:bg-slate-800 transition-all">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${color} bg-opacity-20`}>
+      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-3 md:p-4 rounded-xl flex items-center justify-between hover:bg-slate-800 transition-all">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className={`p-1.5 md:p-2 rounded-lg ${color} bg-opacity-20`}>
             {icon}
           </div>
-          <div>
-            <p className="text-slate-400 text-sm">{title}</p>
-            <p className="text-xl font-mono font-bold text-slate-100">{price}</p>
+          <div className="min-w-0">
+            <p className="text-slate-400 text-xs md:text-sm truncate">{title}</p>
+            <p className="text-lg md:text-xl font-mono font-bold text-slate-100 truncate">{price}</p>
           </div>
         </div>
-        <div className={`text-right ${isUp ? 'text-red-400' : 'text-green-400'}`}>
-          <div className="flex items-center justify-end gap-1">
-            {isUp ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-            <span className="font-bold">{change}%</span>
+        <div className={`text-right ${isUp ? 'text-red-400' : 'text-green-400'} flex-shrink-0 ml-2`}>
+          <div className="flex items-center justify-end gap-0.5 md:gap-1">
+            {isUp ? <TrendingUp className="w-3 h-3 md:w-4 md:h-4" /> : <TrendingDown className="w-3 h-3 md:w-4 md:h-4" />}
+            <span className="font-bold text-sm md:text-base">{change}%</span>
           </div>
         </div>
       </div>
@@ -264,7 +264,7 @@ const IntelligenceStation = () => {
         )}
 
         {/* 2. Market Overview Cards */}
-        <section className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           <MarketCard 
             title="上证指数" 
             price={data?.market?.stocks?.shanghai?.price || '-'} 
