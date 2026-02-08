@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const yahooFinance = require('yahoo-finance2').default; // Yahoo Finance 2
+const yahooFinance = require('yahoo-finance2').default;
 const iconv = require('iconv-lite');
 const { openai } = require('../config/ai');
 
