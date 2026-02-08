@@ -29,245 +29,109 @@ let cachedData = {
 async function fetchMarketData() {
   const market = { stocks: {}, gold: {}, crypto: {}, flows: {} };
   
-  // --- Strategy: Primary (Tencent/Sina) -> Fallback (Yahoo Finance) ---
+  // Define all symbols for batch fetching to reduce requests and avoid 429 errors
+  const symbolMap = {
+    '000001.SS': { category: 'stocks', key: 'shanghai', name: '上证指数' },
+    '399001.SZ': { category: 'stocks', key: 'shenzhen', name: '深证成指' },
+    '^HSI': { category: 'stocks', key: 'hsi', name: '恒生指数' },
+    '3033.HK': { category: 'stocks', key: 'hstech', name: '恒生科技(ETF)' },
+    '^DJI': { category: 'stocks', key: 'dji', name: '道琼斯' },
+    '^IXIC': { category: 'stocks', key: 'nasdaq', name: '纳斯达克' },
+    'GC=F': { category: 'gold', key: 'london', name: '伦敦金' },
+    'BTC-USD': { category: 'crypto', key: 'bitcoin', name: '比特币' },
+    'DX-Y.NYB': { category: 'flows', key: 'dxy', name: '美元指数' },
+    'CNY=X': { category: 'flows', key: 'usdcny', name: 'USD/CNY' },
+    'CL=F': { category: 'flows', key: 'oil', name: '原油' }
+  };
 
-  // A. Stocks & Gold
+  const symbols = Object.keys(symbolMap);
+
   try {
-    // 尝试腾讯财经 (Primary)
-    const qtUrl = 'http://qt.gtimg.cn/q=sh000001,sz399001,hkHSI,hkHSTECH,hf_XAU,us.DJI';
-    const qtRes = await axios.get(qtUrl, { 
-        responseType: 'arraybuffer',
-        timeout: 5000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-    });
-    const qtData = iconv.decode(qtRes.data, 'gbk');
-    const lines = qtData.split(';');
-
-    // Helper to parse QT format
-    const parseQt = (line) => {
-      if (!line) return null;
-      const content = line.split('"')[1];
-      if (!content) return null;
-      const parts = content.split('~');
-      return {
-        name: parts[1],
-        price: parseFloat(parts[3]),
-        changePercent: parseFloat(parts[32]),
-        changeAmount: parseFloat(parts[31])
-      };
-    };
-
-    const sh = parseQt(lines[0]);
-    if (sh && sh.price > 0) market.stocks.shanghai = { ...sh, name: '上证指数' };
-
-    const sz = parseQt(lines[1]);
-    if (sz && sz.price > 0) market.stocks.shenzhen = { ...sz, name: '深证成指' };
-
-    const hsi = parseQt(lines[2]);
-    if (hsi && hsi.price > 0) market.stocks.hsi = { ...hsi, name: '恒生指数' };
-
-    const hstech = parseQt(lines[3]);
-    if (hstech && hstech.price > 0) market.stocks.hstech = { ...hstech, name: '恒生科技' };
-
-    // 黄金: hf_XAU
-    if (lines[4]) {
-        const content = lines[4].split('"')[1];
-        if (content) {
-            const parts = content.split(',');
-            market.gold.london = {
-                name: '伦敦金',
-                price: parseFloat(parts[0]) || 0,
-                changePercent: parseFloat(parts[1]) || 0
-            };
-        }
-    }
+    console.log('Fetching market data from Yahoo Finance (Batched)...');
     
-    const dji = parseQt(lines[5]);
-    if (dji && dji.price > 0) market.stocks.dji = { ...dji, name: '道琼斯' };
+    // Batch request to Yahoo Finance
+    const results = await yahooFinance.quote(symbols, { validateResult: false });
 
-  } catch (e) {
-    console.error('Market Data (QT) Error:', e.message);
-  }
-
-  // Fallback: Yahoo Finance (if any key data is missing)
-  if (!market.stocks.shanghai || !market.stocks.hsi || !market.gold.london) {
-      console.log('Primary source failed or incomplete, switching to Yahoo Finance fallback...');
-      try {
-          // Map: 000001.SS (上证), 399001.SZ (深证), ^HSI (恒生), 3033.HK (恒生科技ETF替代), GC=F (黄金), ^DJI (道指)
-          // Note: Yahoo Finance query1 API is robust
-          const symbols = ['000001.SS', '399001.SZ', '^HSI', '3033.HK', 'GC=F', '^DJI'];
-          const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbols.join(',')}?interval=1d&range=1d`; // Batch not supported this way in v8 chart, need loop or quote api
-          
-          // Use yahoo-finance2 for reliable overseas access
-          const results = await yahooFinance.quote(symbols);
-
-          if (results && results.length > 0) {
-              const find = (sym) => results.find(r => r.symbol === sym);
-              
-              const sh = find('000001.SS');
-              if (sh) market.stocks.shanghai = { name: '上证指数', price: sh.regularMarketPrice, changePercent: sh.regularMarketChangePercent };
-              
-              const sz = find('399001.SZ');
-              if (sz) market.stocks.shenzhen = { name: '深证成指', price: sz.regularMarketPrice, changePercent: sz.regularMarketChangePercent };
-              
-              const hsi = find('^HSI');
-              if (hsi) market.stocks.hsi = { name: '恒生指数', price: hsi.regularMarketPrice, changePercent: hsi.regularMarketChangePercent };
-              
-              const hstech = find('3033.HK'); // Using ETF as proxy for Tech index direction
-              if (hstech) market.stocks.hstech = { name: '恒生科技(ETF)', price: hstech.regularMarketPrice, changePercent: hstech.regularMarketChangePercent };
-              
-              const gold = find('GC=F');
-              if (gold) market.gold.london = { name: 'COMEX黄金', price: gold.regularMarketPrice, changePercent: gold.regularMarketChangePercent };
-
-              const dji = find('^DJI');
-              if (dji) market.stocks.dji = { name: '道琼斯', price: dji.regularMarketPrice, changePercent: dji.regularMarketChangePercent };
-          }
-      } catch (ey) {
-          console.error('Yahoo Finance Fallback Error:', ey.message);
-      }
-  }
-
-  // ... (Rest of the function: Bitcoin, Sina Flows)
-
-  // Bitcoin (CryptoCompare -> Blockchain.info -> Mock)
-  try {
-    // 1. CryptoCompare (More reliable without proxy)
-    const ccRes = await axios.get('https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD', { timeout: 5000 });
-    // Note: CryptoCompare only gives price. For change%, we need 'pricemultifull' or just 0.
-    // Let's try to get change% if possible: https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC&tsyms=USD
-    const ccFullRes = await axios.get('https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC&tsyms=USD', { timeout: 5000 });
-    const rawCC = ccFullRes.data.RAW.BTC.USD;
-    
-    market.crypto.bitcoin = {
-      name: 'Bitcoin',
-      price: parseFloat(rawCC.PRICE).toFixed(2),
-      changePercent: parseFloat(rawCC.CHANGEPCT24HOUR).toFixed(2)
-    };
-  } catch (e) {
-    console.error('Crypto (CryptoCompare) Error:', e.message);
-  }
-
-  // Global Flows (Sina Finance)
-  // DINIW: Dollar Index, USDCNY: USD/CNY, hf_CL: Crude Oil
-  try {
-      const sinaUrl = 'http://hq.sinajs.cn/list=DINIW,USDCNY,hf_CL,gb_dji,gb_ixic';
-      const sinaRes = await axios.get(sinaUrl, { 
-          responseType: 'arraybuffer',
-          headers: { 'Referer': 'https://finance.sina.com.cn/' }
-      });
-      const sinaText = iconv.decode(sinaRes.data, 'gbk');
-      
-      market.flows = {};
-
-      // Helper for Sina format: var hq_str_CODE="val1,val2,..."
-      const parseSina = (code, text) => {
-          const match = text.match(new RegExp(`var hq_str_${code}="(.*?)";`));
-          if (match && match[1]) {
-              const parts = match[1].split(',');
-              return parts;
-          }
-          return null;
-      };
-
-      // DINIW: time, price, ...
-      // "04:59:02,97.6102,97.6102,97.9300,4724,97.9323,98.0297,97.5573,97.6102,美元指数,2026-02-07"
-      // Index 1: Current Price. Index 2: Open/Prev Close.
-      const diniw = parseSina('DINIW', sinaText);
-      if (diniw) {
-          const price = parseFloat(diniw[1]);
-          const prev = parseFloat(diniw[2]);
-          market.flows.dxy = {
-              name: '美元指数',
-              price: price.toFixed(2),
-              changePercent: prev ? ((price - prev) / prev * 100).toFixed(2) : '0.00'
-          };
-      }
-
-      // USDCNY: "03:00:01,6.9345,6.9362,..."
-      // Index 1: Price, Index 2: Prev
-      const usdcny = parseSina('USDCNY', sinaText);
-      if (usdcny) {
-           const price = parseFloat(usdcny[1]);
-           const prev = parseFloat(usdcny[2]);
-           market.flows.usdcny = {
-               name: 'USD/CNY',
-               price: price.toFixed(4),
-               changePercent: prev ? ((price - prev) / prev * 100).toFixed(2) : '0.00'
+    if (results && Array.isArray(results)) {
+      results.forEach(quote => {
+        const symbol = quote.symbol;
+        const config = symbolMap[symbol];
+        
+        if (config && quote.regularMarketPrice !== undefined) {
+           const item = {
+             name: config.name,
+             price: quote.regularMarketPrice,
+             changePercent: quote.regularMarketChangePercent || 0
            };
-      }
-      
-      // Crude Oil (hf_CL): "63.597,,63.490,..." -> Index 0: Price, Index 2: Open/Prev
-      const oil = parseSina('hf_CL', sinaText);
-      if (oil) {
-          const price = parseFloat(oil[0]);
-          const prev = parseFloat(oil[2]); // Use Index 2 as ref if Index 1 is empty
-          // Some sina futures have change% at index 1, but if empty, calc manually
-          let changePct = '0.00';
-          if (oil[1]) {
-              changePct = parseFloat(oil[1]).toFixed(2);
-          } else if (prev) {
-              changePct = ((price - prev) / prev * 100).toFixed(2);
-          }
-          
-          market.flows.oil = {
-              name: '原油',
-              price: price.toFixed(2),
-              changePercent: changePct
-          };
-      }
-      
-      // US Stocks (gb_dji)
-      // "道琼斯,50115.6719,2.47,..." -> Index 1: Price, Index 2: Change%
-      const dji = parseSina('gb_dji', sinaText);
-      if (dji) {
-          market.stocks.dji = {
-              name: '道琼斯',
-              price: parseFloat(dji[1]).toFixed(0),
-              changePercent: parseFloat(dji[2]).toFixed(2)
-          };
-      }
-      
-      const ixic = parseSina('gb_ixic', sinaText);
-      if (ixic) {
-          market.stocks.nasdaq = {
-              name: '纳斯达克',
-              price: parseFloat(ixic[1]).toFixed(0),
-              changePercent: parseFloat(ixic[2]).toFixed(2)
-          };
-      }
+           
+           // Handle nested structure
+           if (!market[config.category]) market[config.category] = {};
+           market[config.category][config.key] = item;
+        }
+      });
+    }
 
-  } catch (e) {
-      console.error('Global Flows (Sina) Error:', e.message);
+  } catch (error) {
+    console.error('Yahoo Market Data Error:', error.message);
+    // Graceful degradation: Log error but return empty/partial market object
+    // Do not throw to prevent app crash
+    if (error.message.includes('429')) {
+        console.warn('Hit Yahoo Rate Limit (429). Consider increasing interval.');
+    }
   }
 
-  // Fallback for Flows (if Sina failed)
-  if (!market.flows.dxy || !market.flows.usdcny || !market.flows.oil || !market.stocks.nasdaq) {
-      console.log('Sina flows failed, switching to Yahoo Finance fallback...');
+  // Fallback check: If critical data missing, try secondary source (Tencent) ONLY for missing items
+  // But per user request "Prioritize Yahoo", we only fallback if Yahoo completely failed or missed items
+  // For simplicity and "All Yahoo" preference, we might skip complex per-item fallback unless necessary.
+  // Let's keep it simple: Yahoo is Primary. If empty, maybe try Tencent as backup for CN stocks?
+  // User said "Prioritize Yahoo", implying others are secondary.
+  
+  const hasData = Object.keys(market.stocks).length > 0;
+  if (!hasData) {
+      console.log('Yahoo failed or returned no data, trying Tencent fallback for key indices...');
       try {
-          const symbols = ['DX-Y.NYB', 'CNY=X', 'CL=F', '^IXIC'];
-          const results = await yahooFinance.quote(symbols);
-
-          if (results && results.length > 0) {
-              const find = (sym) => results.find(r => r.symbol === sym);
-
-              const dxy = find('DX-Y.NYB');
-              if (dxy) market.flows.dxy = { name: '美元指数', price: dxy.regularMarketPrice, changePercent: dxy.regularMarketChangePercent };
-
-              const cny = find('CNY=X');
-              if (cny) market.flows.usdcny = { name: 'USD/CNY', price: cny.regularMarketPrice, changePercent: cny.regularMarketChangePercent };
-
-              const oil = find('CL=F');
-              if (oil) market.flows.oil = { name: '原油', price: oil.regularMarketPrice, changePercent: oil.regularMarketChangePercent };
-              
-              const ixic = find('^IXIC');
-              if (ixic) market.stocks.nasdaq = { name: '纳斯达克', price: ixic.regularMarketPrice, changePercent: ixic.regularMarketChangePercent };
-          }
+        await fetchTencentFallback(market);
       } catch (e) {
-          console.error('Yahoo Flows Fallback Error:', e.message);
+        console.error('Tencent Fallback failed:', e.message);
       }
   }
 
   return market;
+}
+
+async function fetchTencentFallback(market) {
+    // Tencent Fallback Logic for CN/HK/US basic indices
+    const qtUrl = 'http://qt.gtimg.cn/q=sh000001,sz399001,hkHSI,hkHSTECH,hf_XAU,us.DJI,us.IXIC';
+    const qtRes = await axios.get(qtUrl, { 
+        responseType: 'arraybuffer',
+        timeout: 5000,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    const qtData = iconv.decode(qtRes.data, 'gbk');
+    const lines = qtData.split(';');
+
+    const parse = (code, name, cat, key) => {
+        const line = lines.find(l => l.includes(`v_${code}=`));
+        if (line) {
+            const parts = line.split('"')[1].split('~');
+            if (parts.length > 30) {
+                 if (!market[cat]) market[cat] = {};
+                 market[cat][key] = {
+                     name: name,
+                     price: parseFloat(parts[3]),
+                     changePercent: parseFloat(parts[32])
+                 };
+            }
+        }
+    };
+
+    parse('sh000001', '上证指数', 'stocks', 'shanghai');
+    parse('sz399001', '深证成指', 'stocks', 'shenzhen');
+    parse('hkHSI', '恒生指数', 'stocks', 'hsi');
+    parse('hkHSTECH', '恒生科技', 'stocks', 'hstech');
+    parse('us.DJI', '道琼斯', 'stocks', 'dji');
+    parse('us.IXIC', '纳斯达克', 'stocks', 'nasdaq');
+    parse('hf_XAU', '伦敦金', 'gold', 'london');
 }
 
 // 2. 获取新闻 (RSS + 百度热搜)

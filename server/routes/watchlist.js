@@ -5,40 +5,47 @@ const yahooFinance = require('yahoo-finance2').default;
 const iconv = require('iconv-lite');
 const { openai } = require('../config/ai');
 
-// Helper: Fetch market data with Fallback (Tencent -> Sina -> Yahoo)
+// Helper: Fetch market data with Fallback (Yahoo -> Tencent -> Sina)
+// Prioritize Yahoo Finance as requested, with batched requests
 async function fetchMarketData(codes) {
     let errors = [];
 
-    // 1. Try Tencent (Primary)
+    // 1. Try Yahoo Finance (Primary - Batched & Global)
     try {
+        console.log('Fetching watchlist from Yahoo Finance (Primary)...');
+        const results = await fetchYahoo(codes);
+        if (results && results.length > 0) return results;
+    } catch (e) {
+        console.error('Watchlist Primary (Yahoo) Error:', e.message);
+        errors.push(`Yahoo: ${e.message}`);
+        if (e.message.includes('429')) {
+             console.warn('Yahoo 429 Rate Limit Hit. Consider pausing requests.');
+        }
+    }
+
+    // 2. Try Tencent (Secondary)
+    try {
+        console.log('Switching to Tencent fallback...');
         const results = await fetchTencent(codes);
         if (results && results.length > 0) return results;
     } catch (e) {
-        console.error('Watchlist Primary (Tencent) Error:', e.message);
+        console.error('Watchlist Secondary (Tencent) Error:', e.message);
         errors.push(`Tencent: ${e.message}`);
     }
 
-    // 2. Try Sina (Secondary - mainly for A-share/HK)
+    // 3. Try Sina (Final Fallback)
     try {
         console.log('Switching to Sina Finance fallback...');
         const results = await fetchSina(codes);
         if (results && results.length > 0) return results;
     } catch (e) {
-        console.error('Watchlist Secondary (Sina) Error:', e.message);
+        console.error('Watchlist Fallback (Sina) Error:', e.message);
         errors.push(`Sina: ${e.message}`);
     }
 
-    // 3. Try Yahoo Finance (Final Fallback - Global)
-    try {
-        console.log('Switching to Yahoo Finance fallback...');
-        const results = await fetchYahoo(codes);
-        if (results && results.length > 0) return results;
-    } catch (e) {
-        console.error('Watchlist Fallback (Yahoo) Error:', e.message);
-        errors.push(`Yahoo: ${e.message}`);
-    }
-
-    throw new Error('All data sources failed. Details: ' + errors.join('; '));
+    // If all fail, don't crash, just return empty with error details logged
+    console.error('All watchlist data sources failed:', errors.join('; '));
+    return []; // Return empty array to prevent crash
 }
 
 async function fetchTencent(codes) {
@@ -201,12 +208,13 @@ async function fetchYahoo(codes) {
         if (c.startsWith('sh') || /^60|^68|^5|^9|^11/.test(raw)) return `${raw}.SS`;
         if (c.startsWith('sz') || /^00|^30|^1|^2|^4/.test(raw)) return `${raw}.SZ`;
         if (c.startsWith('hk') || /^\d{5}$/.test(raw)) {
-            // Yahoo uses 4 digits usually? No, 0700.HK. But user might input 00700.
-            // Let's try to keep as is, but remove leading zero if length > 4?
-            // Actually Yahoo HK symbols are like 0700.HK (4 digits) or 0005.HK.
-            // Let's assume input is 5 digits like 00700 -> 0700.HK? 
-            // Or just try raw.HK.
-            return `${raw.replace(/^0/, '')}.HK`; 
+            // Robust HK mapping: Remove non-digits, parse int, pad to 4 digits
+            const numStr = raw.replace(/\D/g, '');
+            const num = parseInt(numStr, 10);
+            if (!isNaN(num)) {
+                return `${num.toString().padStart(4, '0')}.HK`;
+            }
+            return `${raw}.HK`; // Fallback
         }
         if (c.startsWith('us') || /^[a-z]+$/.test(raw)) return raw.toUpperCase();
         
@@ -214,9 +222,9 @@ async function fetchYahoo(codes) {
     });
 
     try {
-        const results = await yahooFinance.quote(yahooSymbols);
+        const results = await yahooFinance.quote(yahooSymbols, { validateResult: false });
 
-        if (results && results.length > 0) {
+        if (results && Array.isArray(results) && results.length > 0) {
             return results.map(r => {
                 return {
                     code: r.symbol, // Use symbol as code
@@ -228,10 +236,23 @@ async function fetchYahoo(codes) {
                     pe: r.trailingPE || '-'
                 };
             });
+        } else if (results && !Array.isArray(results)) {
+            // Handle single result case if library returns object for single symbol
+             const r = results;
+             return [{
+                    code: r.symbol,
+                    name: r.shortName || r.longName || r.symbol,
+                    price: r.regularMarketPrice,
+                    change: r.regularMarketChange,
+                    changePercent: r.regularMarketChangePercent,
+                    market_value: r.marketCap || '-',
+                    pe: r.trailingPE || '-'
+             }];
         }
         return [];
     } catch (ey) {
         console.error('Yahoo Watchlist Fallback Error:', ey.message);
+        // If 401/404, we just return empty so it falls back to Tencent
         return [];
     }
 }
