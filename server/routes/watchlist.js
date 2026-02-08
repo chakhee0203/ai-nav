@@ -5,10 +5,43 @@ const yahooFinance = require('yahoo-finance2').default;
 const iconv = require('iconv-lite');
 const { openai } = require('../config/ai');
 
-// Helper: Fetch market data with Fallback
+// Helper: Fetch market data with Fallback (Tencent -> Sina -> Yahoo)
 async function fetchMarketData(codes) {
+    let errors = [];
+
     // 1. Try Tencent (Primary)
-    // Construct query
+    try {
+        const results = await fetchTencent(codes);
+        if (results && results.length > 0) return results;
+    } catch (e) {
+        console.error('Watchlist Primary (Tencent) Error:', e.message);
+        errors.push(`Tencent: ${e.message}`);
+    }
+
+    // 2. Try Sina (Secondary - mainly for A-share/HK)
+    try {
+        console.log('Switching to Sina Finance fallback...');
+        const results = await fetchSina(codes);
+        if (results && results.length > 0) return results;
+    } catch (e) {
+        console.error('Watchlist Secondary (Sina) Error:', e.message);
+        errors.push(`Sina: ${e.message}`);
+    }
+
+    // 3. Try Yahoo Finance (Final Fallback - Global)
+    try {
+        console.log('Switching to Yahoo Finance fallback...');
+        const results = await fetchYahoo(codes);
+        if (results && results.length > 0) return results;
+    } catch (e) {
+        console.error('Watchlist Fallback (Yahoo) Error:', e.message);
+        errors.push(`Yahoo: ${e.message}`);
+    }
+
+    throw new Error('All data sources failed. Details: ' + errors.join('; '));
+}
+
+async function fetchTencent(codes) {
     const formattedCodes = codes.map(c => {
         c = c.toLowerCase().trim();
         if (/^(sh|sz|hk|us)/.test(c)) return c;
@@ -22,56 +55,138 @@ async function fetchMarketData(codes) {
 
     const url = `http://qt.gtimg.cn/q=${formattedCodes.join(',')}`;
 
-    try {
-        const res = await axios.get(url, { 
-            responseType: 'arraybuffer',
-            timeout: 5000,
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-        });
-        const text = iconv.decode(res.data, 'gbk');
-        
-        const results = [];
-        const lines = text.split(';');
-        
-        // Check if we got valid data for at least one code
-        let hasValidData = false;
-
-        formattedCodes.forEach((code, idx) => {
-            const match = lines.find(l => l.includes(`v_${code}=`));
-            if (match) {
-                const dataStr = match.split('"')[1];
-                if (dataStr) {
-                    const parts = dataStr.split('~');
-                    if (parts.length > 30) {
-                        hasValidData = true;
-                        results.push({
-                            code: code,
-                            name: parts[1],
-                            price: parts[3],
-                            change: parts[31],
-                            changePercent: parts[32],
-                            market_value: parts[45] || '-',
-                            pe: parts[39] || '-'
-                        });
-                    }
+    const res = await axios.get(url, { 
+        responseType: 'arraybuffer',
+        timeout: 5000,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    const text = iconv.decode(res.data, 'gbk');
+    
+    const results = [];
+    const lines = text.split(';');
+    
+    formattedCodes.forEach((code, idx) => {
+        const match = lines.find(l => l.includes(`v_${code}=`));
+        if (match) {
+            const dataStr = match.split('"')[1];
+            if (dataStr) {
+                const parts = dataStr.split('~');
+                if (parts.length > 30) {
+                    results.push({
+                        code: code,
+                        name: parts[1],
+                        price: parts[3],
+                        change: parts[31],
+                        changePercent: parts[32],
+                        market_value: parts[45] || '-',
+                        pe: parts[39] || '-'
+                    });
                 }
             }
-        });
+        }
+    });
 
-        if (hasValidData) return results;
-        // If no valid data, throw to trigger fallback
-        throw new Error('No valid data from Tencent');
-
-    } catch (e) {
-        console.error('Watchlist Primary (Tencent) Error:', e.message);
-        
-        // 2. Fallback: Yahoo Finance
-        console.log('Switching to Yahoo Finance fallback for watchlist...');
-        return await fetchYahooFallback(codes);
-    }
+    if (results.length > 0) return results;
+    throw new Error('No valid data returned');
 }
 
-async function fetchYahooFallback(codes) {
+async function fetchSina(codes) {
+    // Map codes to Sina format
+    // A-share: sh600000, sz000001
+    // HK: rt_hk00700
+    // US: gb_aapl (lower case)
+    const sinaMap = {};
+    const formattedCodes = codes.map(c => {
+        c = c.toLowerCase().trim();
+        const raw = c.replace(/^(sh|sz|hk|us|bj)/, '');
+        let sinaCode = c;
+        
+        if (c.startsWith('sh') || /^60|^68|^5|^9|^11/.test(raw)) sinaCode = `sh${raw}`;
+        else if (c.startsWith('sz') || /^00|^30|^1|^2|^4/.test(raw)) sinaCode = `sz${raw}`;
+        else if (c.startsWith('hk') || /^\d{5}$/.test(raw)) sinaCode = `rt_hk${raw}`;
+        else if (c.startsWith('us') || /^[a-z]+$/.test(raw)) sinaCode = `gb_${raw}`;
+        
+        sinaMap[sinaCode] = c; // Map back to original input logic if needed
+        return sinaCode;
+    });
+
+    const url = `http://hq.sinajs.cn/list=${formattedCodes.join(',')}`;
+
+    const res = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 5000,
+        headers: { 'Referer': 'https://finance.sina.com.cn/' }
+    });
+    const text = iconv.decode(res.data, 'gbk');
+    const lines = text.split('\n');
+    const results = [];
+
+    lines.forEach(line => {
+        if (!line.includes('="')) return;
+        const [keyPart, dataPart] = line.split('="');
+        const codeMatch = keyPart.match(/hq_str_(.+)/);
+        if (!codeMatch) return;
+        
+        const sinaCode = codeMatch[1];
+        const data = dataPart.replace('";', '').split(',');
+        
+        if (data.length < 5) return; // Invalid data
+
+        let item = null;
+        
+        // Parse based on market type
+        if (sinaCode.startsWith('sh') || sinaCode.startsWith('sz')) {
+            // A-share: name(0), open(1), prevClose(2), price(3)
+            const price = parseFloat(data[3]);
+            const prevClose = parseFloat(data[2]);
+            if (price > 0 && prevClose > 0) {
+                const change = (price - prevClose).toFixed(2);
+                const changePercent = ((change / prevClose) * 100).toFixed(2);
+                item = {
+                    code: sinaCode,
+                    name: data[0],
+                    price: data[3],
+                    change: change,
+                    changePercent: changePercent,
+                    market_value: '-', // Sina simple API might not have MV
+                    pe: '-'
+                };
+            }
+        } else if (sinaCode.startsWith('rt_hk')) {
+            // HK: engName(0), name(1), open(2), prevClose(3), high(4), low(5), price(6), change(7), pct(8)
+            item = {
+                code: sinaCode.replace('rt_', ''), // display as hk...
+                name: data[1],
+                price: data[6],
+                change: data[7],
+                changePercent: data[8],
+                market_value: '-',
+                pe: '-'
+            };
+        } else if (sinaCode.startsWith('gb_')) {
+            // US: name(0), price(1), change(2), time(3) -> Change is amount? Or pct?
+            // Usually data[2] is change percent in Sina US API?
+            // Let's check typical response: "Apple Inc,135.37,2.44,..."
+            // It is risky. Let's try.
+            item = {
+                code: sinaCode.replace('gb_', 'us'),
+                name: data[0],
+                price: data[1],
+                change: '-', // specific change amount not always clear
+                changePercent: data[2],
+                market_value: '-',
+                pe: '-'
+            };
+        }
+
+        if (item) results.push(item);
+    });
+
+    if (results.length > 0) return results;
+    throw new Error('No valid data returned');
+}
+
+async function fetchYahoo(codes) {
     // Map codes to Yahoo symbols
     // sh600000 -> 600000.SS
     // sz000001 -> 000001.SZ
