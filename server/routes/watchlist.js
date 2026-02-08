@@ -4,86 +4,121 @@ const axios = require('axios');
 const iconv = require('iconv-lite');
 const { openai } = require('../config/ai');
 
-// Helper: Fetch market data from Tencent
-// Supports auto-detection by trying prefixes if not provided
+// Helper: Fetch market data with Fallback
 async function fetchMarketData(codes) {
-    // 1. Construct query
-    // We'll try to guess prefixes if missing.
-    // A-share: 6 digits (60xxxx -> sh, 00xxxx -> sz, 30xxxx -> sz, 68xxxx -> sh, 4/8 -> bj?)
-    // HK: 5 digits
-    // US: Letters
-    
+    // 1. Try Tencent (Primary)
+    // Construct query
     const formattedCodes = codes.map(c => {
         c = c.toLowerCase().trim();
-        if (/^(sh|sz|hk|us)/.test(c)) return c; // Already has prefix
-        
-        // Auto-guess
-        if (/^60/.test(c) || /^68/.test(c) || /^5/.test(c) || /^9/.test(c) || /^11/.test(c)) return `sh${c}`; // SH Stocks/Funds/Bonds
-        if (/^00/.test(c) || /^30/.test(c) || /^1/.test(c) || /^2/.test(c) || /^4/.test(c)) return `sz${c}`; // SZ Stocks/Funds
-        if (/^8/.test(c) || /^43/.test(c) || /^83/.test(c) || /^87/.test(c)) return `bj${c}`; // BJ Stocks (Tencent support?)
+        if (/^(sh|sz|hk|us)/.test(c)) return c;
+        if (/^60/.test(c) || /^68/.test(c) || /^5/.test(c) || /^9/.test(c) || /^11/.test(c)) return `sh${c}`;
+        if (/^00/.test(c) || /^30/.test(c) || /^1/.test(c) || /^2/.test(c) || /^4/.test(c)) return `sz${c}`;
+        if (/^8/.test(c) || /^43/.test(c) || /^83/.test(c) || /^87/.test(c)) return `bj${c}`;
         if (/^\d{5}$/.test(c)) return `hk${c}`;
-        if (/^[a-z]+$/.test(c)) return `us${c}`; // US stocks
-        // Funds (Open-end): usually 6 digits but not starting with 60/00/30 necessarily?
-        // Let's assume user might enter full code or we default to 'sh/sz' for ETFs.
-        // For pure funds, Tencent uses 'f_' prefix? e.g. f_161725.
-        // Let's try adding generic handling or just return as is if unsure
-        return c; 
+        if (/^[a-z]+$/.test(c)) return `us${c}`;
+        return c;
     });
 
     const url = `http://qt.gtimg.cn/q=${formattedCodes.join(',')}`;
 
     try {
-        const res = await axios.get(url, { responseType: 'arraybuffer' });
+        const res = await axios.get(url, { 
+            responseType: 'arraybuffer',
+            timeout: 5000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+        });
         const text = iconv.decode(res.data, 'gbk');
         
         const results = [];
         const lines = text.split(';');
         
+        // Check if we got valid data for at least one code
+        let hasValidData = false;
+
         formattedCodes.forEach((code, idx) => {
-            // Find line starting with v_code=
             const match = lines.find(l => l.includes(`v_${code}=`));
             if (match) {
                 const dataStr = match.split('"')[1];
                 if (dataStr) {
                     const parts = dataStr.split('~');
-                    // Tencent Format:
-                    // 0: Unknown?
-                    // 1: Name
-                    // 2: Code
-                    // 3: Current Price
-                    // 4: Last Close
-                    // 5: Open
-                    // 30: Time?
-                    // 31: Change
-                    // 32: Change%
-                    // 33: High
-                    // 34: Low
-                    // ...
-                    // Different for US/HK? 
-                    // HK: Similar
-                    // US: Similar
-                    
-                    results.push({
-                        code: code,
-                        name: parts[1],
-                        price: parts[3],
-                        change: parts[31],
-                        changePercent: parts[32],
-                        market_value: parts[45] || '-', // Market Cap often here
-                        pe: parts[39] || '-' // PE often here
-                    });
-                } else {
-                     results.push({ code, error: 'Data not found' });
+                    if (parts.length > 30) {
+                        hasValidData = true;
+                        results.push({
+                            code: code,
+                            name: parts[1],
+                            price: parts[3],
+                            change: parts[31],
+                            changePercent: parts[32],
+                            market_value: parts[45] || '-',
+                            pe: parts[39] || '-'
+                        });
+                    }
                 }
-            } else {
-                results.push({ code, error: 'Invalid code' });
             }
         });
-        
-        return results;
+
+        if (hasValidData) return results;
+        // If no valid data, throw to trigger fallback
+        throw new Error('No valid data from Tencent');
 
     } catch (e) {
-        console.error('Watchlist Data Fetch Error:', e);
+        console.error('Watchlist Primary (Tencent) Error:', e.message);
+        
+        // 2. Fallback: Yahoo Finance
+        console.log('Switching to Yahoo Finance fallback for watchlist...');
+        return await fetchYahooFallback(codes);
+    }
+}
+
+async function fetchYahooFallback(codes) {
+    // Map codes to Yahoo symbols
+    // sh600000 -> 600000.SS
+    // sz000001 -> 000001.SZ
+    // hk00700 -> 0700.HK
+    // usAAPL -> AAPL
+    const yahooSymbols = codes.map(c => {
+        c = c.toLowerCase().trim();
+        // Remove prefixes if present to re-add correctly
+        const raw = c.replace(/^(sh|sz|hk|us|bj)/, '');
+        
+        // Heuristic
+        if (c.startsWith('sh') || /^60|^68|^5|^9|^11/.test(raw)) return `${raw}.SS`;
+        if (c.startsWith('sz') || /^00|^30|^1|^2|^4/.test(raw)) return `${raw}.SZ`;
+        if (c.startsWith('hk') || /^\d{5}$/.test(raw)) {
+            // Yahoo uses 4 digits usually? No, 0700.HK. But user might input 00700.
+            // Let's try to keep as is, but remove leading zero if length > 4?
+            // Actually Yahoo HK symbols are like 0700.HK (4 digits) or 0005.HK.
+            // Let's assume input is 5 digits like 00700 -> 0700.HK? 
+            // Or just try raw.HK.
+            return `${raw.replace(/^0/, '')}.HK`; 
+        }
+        if (c.startsWith('us') || /^[a-z]+$/.test(raw)) return raw.toUpperCase();
+        
+        return raw; // Hope for the best
+    });
+
+    try {
+        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahooSymbols.join(',')}`;
+        const yRes = await axios.get(quoteUrl, { 
+            timeout: 8000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+        });
+        const results = yRes.data.quoteResponse.result;
+        
+        if (!results) return [];
+
+        return results.map(r => ({
+            code: r.symbol,
+            name: r.shortName || r.longName,
+            price: r.regularMarketPrice,
+            change: r.regularMarketChange,
+            changePercent: r.regularMarketChangePercent,
+            market_value: r.marketCap,
+            pe: r.trailingPE
+        }));
+
+    } catch (ey) {
+        console.error('Watchlist Yahoo Fallback Error:', ey.message);
         return [];
     }
 }

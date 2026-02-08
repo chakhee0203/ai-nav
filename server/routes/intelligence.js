@@ -26,13 +26,19 @@ let cachedData = {
 
 // 1. 获取市场数据
 async function fetchMarketData() {
-  const market = { stocks: {}, gold: {}, crypto: {} };
+  const market = { stocks: {}, gold: {}, crypto: {}, flows: {} };
   
+  // --- Strategy: Primary (Tencent/Sina) -> Fallback (Yahoo Finance) ---
+
+  // A. Stocks & Gold
   try {
-    // A股 & 港股 & 黄金 (腾讯财经)
-    // sh000001: 上证, sz399001: 深证, hkHSI: 恒生指数, hkHSTECH: 恒生科技, hf_XAU: 伦敦金
-    const qtUrl = 'http://qt.gtimg.cn/q=sh000001,sz399001,hkHSI,hkHSTECH,hf_XAU';
-    const qtRes = await axios.get(qtUrl, { responseType: 'arraybuffer' });
+    // 尝试腾讯财经 (Primary)
+    const qtUrl = 'http://qt.gtimg.cn/q=sh000001,sz399001,hkHSI,hkHSTECH,hf_XAU,us.DJI';
+    const qtRes = await axios.get(qtUrl, { 
+        responseType: 'arraybuffer',
+        timeout: 5000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+    });
     const qtData = iconv.decode(qtRes.data, 'gbk');
     const lines = qtData.split(';');
 
@@ -51,24 +57,22 @@ async function fetchMarketData() {
     };
 
     const sh = parseQt(lines[0]);
-    if (sh) market.stocks.shanghai = { ...sh, name: '上证指数' };
+    if (sh && sh.price > 0) market.stocks.shanghai = { ...sh, name: '上证指数' };
 
     const sz = parseQt(lines[1]);
-    if (sz) market.stocks.shenzhen = { ...sz, name: '深证成指' };
+    if (sz && sz.price > 0) market.stocks.shenzhen = { ...sz, name: '深证成指' };
 
     const hsi = parseQt(lines[2]);
-    if (hsi) market.stocks.hsi = { ...hsi, name: '恒生指数' };
+    if (hsi && hsi.price > 0) market.stocks.hsi = { ...hsi, name: '恒生指数' };
 
     const hstech = parseQt(lines[3]);
-    if (hstech) market.stocks.hstech = { ...hstech, name: '恒生科技' };
+    if (hstech && hstech.price > 0) market.stocks.hstech = { ...hstech, name: '恒生科技' };
 
-    // 黄金: hf_XAU (逗号分隔)
-    // v_hf_XAU="price,change%,..."
+    // 黄金: hf_XAU
     if (lines[4]) {
         const content = lines[4].split('"')[1];
         if (content) {
             const parts = content.split(',');
-            // parts[0] is price, parts[1] is change% (likely) or calculated
             market.gold.london = {
                 name: '伦敦金',
                 price: parseFloat(parts[0]) || 0,
@@ -76,10 +80,58 @@ async function fetchMarketData() {
             };
         }
     }
+    
+    const dji = parseQt(lines[5]);
+    if (dji && dji.price > 0) market.stocks.dji = { ...dji, name: '道琼斯' };
 
   } catch (e) {
     console.error('Market Data (QT) Error:', e.message);
   }
+
+  // Fallback: Yahoo Finance (if any key data is missing)
+  if (!market.stocks.shanghai || !market.stocks.hsi || !market.gold.london) {
+      console.log('Primary source failed or incomplete, switching to Yahoo Finance fallback...');
+      try {
+          // Map: 000001.SS (上证), 399001.SZ (深证), ^HSI (恒生), 3033.HK (恒生科技ETF替代), GC=F (黄金), ^DJI (道指)
+          // Note: Yahoo Finance query1 API is robust
+          const symbols = ['000001.SS', '399001.SZ', '^HSI', '3033.HK', 'GC=F', '^DJI'];
+          const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbols.join(',')}?interval=1d&range=1d`; // Batch not supported this way in v8 chart, need loop or quote api
+          
+          // Use quote API for batch: https://query1.finance.yahoo.com/v7/finance/quote?symbols=...
+          const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}`;
+          const yRes = await axios.get(quoteUrl, { 
+              timeout: 8000,
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+          });
+          const results = yRes.data.quoteResponse.result;
+
+          if (results && results.length > 0) {
+              const find = (sym) => results.find(r => r.symbol === sym);
+              
+              const sh = find('000001.SS');
+              if (sh) market.stocks.shanghai = { name: '上证指数', price: sh.regularMarketPrice, changePercent: sh.regularMarketChangePercent };
+              
+              const sz = find('399001.SZ');
+              if (sz) market.stocks.shenzhen = { name: '深证成指', price: sz.regularMarketPrice, changePercent: sz.regularMarketChangePercent };
+              
+              const hsi = find('^HSI');
+              if (hsi) market.stocks.hsi = { name: '恒生指数', price: hsi.regularMarketPrice, changePercent: hsi.regularMarketChangePercent };
+              
+              const hstech = find('3033.HK'); // Using ETF as proxy for Tech index direction
+              if (hstech) market.stocks.hstech = { name: '恒生科技(ETF)', price: hstech.regularMarketPrice, changePercent: hstech.regularMarketChangePercent };
+              
+              const gold = find('GC=F');
+              if (gold) market.gold.london = { name: 'COMEX黄金', price: gold.regularMarketPrice, changePercent: gold.regularMarketChangePercent };
+
+              const dji = find('^DJI');
+              if (dji) market.stocks.dji = { name: '道琼斯', price: dji.regularMarketPrice, changePercent: dji.regularMarketChangePercent };
+          }
+      } catch (ey) {
+          console.error('Yahoo Finance Fallback Error:', ey.message);
+      }
+  }
+
+  // ... (Rest of the function: Bitcoin, Sina Flows)
 
   // Bitcoin (CryptoCompare -> Blockchain.info -> Mock)
   try {
@@ -190,6 +242,38 @@ async function fetchMarketData() {
 
   } catch (e) {
       console.error('Global Flows (Sina) Error:', e.message);
+  }
+
+  // Fallback for Flows (if Sina failed)
+  if (!market.flows.dxy || !market.flows.usdcny || !market.flows.oil || !market.stocks.nasdaq) {
+      console.log('Sina flows failed, switching to Yahoo Finance fallback...');
+      try {
+          const symbols = ['DX-Y.NYB', 'CNY=X', 'CL=F', '^IXIC'];
+          const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}`;
+          const yRes = await axios.get(quoteUrl, { 
+              timeout: 8000,
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+          });
+          const results = yRes.data.quoteResponse.result;
+
+          if (results && results.length > 0) {
+              const find = (sym) => results.find(r => r.symbol === sym);
+
+              const dxy = find('DX-Y.NYB');
+              if (dxy) market.flows.dxy = { name: '美元指数', price: dxy.regularMarketPrice, changePercent: dxy.regularMarketChangePercent };
+
+              const cny = find('CNY=X');
+              if (cny) market.flows.usdcny = { name: 'USD/CNY', price: cny.regularMarketPrice, changePercent: cny.regularMarketChangePercent };
+
+              const oil = find('CL=F');
+              if (oil) market.flows.oil = { name: '原油', price: oil.regularMarketPrice, changePercent: oil.regularMarketChangePercent };
+              
+              const ixic = find('^IXIC');
+              if (ixic) market.stocks.nasdaq = { name: '纳斯达克', price: ixic.regularMarketPrice, changePercent: ixic.regularMarketChangePercent };
+          }
+      } catch (e) {
+          console.error('Yahoo Flows Fallback Error:', e.message);
+      }
   }
 
   return market;
