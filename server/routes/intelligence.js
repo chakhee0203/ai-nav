@@ -80,16 +80,88 @@ async function fetchMarketData() {
     }
   }
 
-  // Fallback check: Removed as per user request to rely solely on Yahoo
-  const hasData = Object.keys(market.stocks).length > 0;
-  if (!hasData) {
-      console.warn('Yahoo returned no data, but fallback is disabled.');
-  }
-
-  return market;
+  // Fallback check: If Yahoo failed (empty data), try Stooq
+    const hasData = Object.keys(market.stocks).length > 0;
+    if (!hasData) {
+        console.warn('Yahoo returned no data, attempting Stooq fallback...');
+        await fetchStooqFallback(market);
+    }
+    
+    return market;
 }
 
 
+
+async function fetchStooqFallback(market) {
+    // Stooq Fallback Logic for Global Indices
+    // Mapping: Yahoo/Internal Key -> Stooq Symbol
+    const map = {
+        'shanghai': '^SHC',  // Shanghai Composite
+        'hsi': '^HSI',       // Hang Seng
+        'dji': '^DJI',       // Dow Jones
+        'nasdaq': '^NDQ',    // Nasdaq
+        'london': 'XAUUSD'   // Gold Spot
+        // Note: Shenzhen and HSTECH not readily available on Stooq public CSV
+    };
+
+    const reverseMap = Object.fromEntries(Object.entries(map).map(([k, v]) => [v, k]));
+    const symbols = Object.values(map).join('+');
+    const url = `https://stooq.com/q/l/?s=${symbols}&f=sd2t2ohlc&h&e=csv`;
+
+    try {
+        console.log('Fetching market data from Stooq (Fallback)...');
+        const res = await axios.get(url, { 
+            timeout: 5000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        
+        // Parse CSV: Symbol,Date,Time,Open,High,Low,Close
+        const lines = res.data.split('\n');
+        // Remove header
+        lines.shift();
+
+        lines.forEach(line => {
+            const parts = line.split(',');
+            if (parts.length >= 7) {
+                const symbol = parts[0];
+                const price = parseFloat(parts[6]); // Close is index 6
+                // Stooq CSV doesn't provide change amount/percent in this format
+                // We will leave change as 0 or null
+                
+                const key = reverseMap[symbol];
+                if (key && !isNaN(price)) {
+                    if (key === 'london') {
+                        if (!market.gold) market.gold = {};
+                        market.gold[key] = {
+                            name: '伦敦金(Stooq)',
+                            price: price,
+                            changePercent: 0 // Not available
+                        };
+                    } else {
+                        if (!market.stocks) market.stocks = {};
+                        market.stocks[key] = {
+                            name: getIndexName(key),
+                            price: price,
+                            changePercent: 0 // Not available
+                        };
+                    }
+                }
+            }
+        });
+    } catch (e) {
+        console.error('Stooq Fallback Error:', e.message);
+    }
+}
+
+function getIndexName(key) {
+    const names = {
+        'shanghai': '上证指数',
+        'hsi': '恒生指数',
+        'dji': '道琼斯',
+        'nasdaq': '纳斯达克'
+    };
+    return names[key] || key;
+}
 
 // 2. 获取新闻 (RSS + 百度热搜)
 async function fetchNews() {

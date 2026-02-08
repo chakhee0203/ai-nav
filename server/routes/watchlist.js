@@ -16,8 +16,78 @@ async function fetchMarketData(codes) {
         if (e.message.includes('429')) {
              console.warn('Yahoo 429 Rate Limit Hit.');
         }
-        return [];
+        
+        // Fallback to Stooq
+        try {
+            console.log('Attempting Stooq fallback for watchlist...');
+            return await fetchStooq(codes);
+        } catch (stooqErr) {
+            console.error('Watchlist Stooq Error:', stooqErr.message);
+            return [];
+        }
     }
+}
+
+async function fetchStooq(codes) {
+    const codeMap = {};
+    const stooqCodes = [];
+
+    codes.forEach(code => {
+        let stooqCode = null;
+        const upper = code.toUpperCase().trim();
+        
+        // Simple Heuristic for Stooq Symbols
+        if (/^[A-Z]+$/.test(upper)) {
+            stooqCode = `${upper}.US`; // US Stocks
+        } else if (upper === '^HSI') {
+            stooqCode = '^HSI';
+        } else if (upper === '^DJI') {
+            stooqCode = '^DJI';
+        } else if (upper === '^IXIC') {
+            stooqCode = '^NDQ';
+        } else if (upper === 'GC=F') {
+            stooqCode = 'XAUUSD';
+        }
+        // Add more mappings as needed (A-shares support on Stooq is limited)
+
+        if (stooqCode) {
+            codeMap[stooqCode] = code;
+            stooqCodes.push(stooqCode);
+        }
+    });
+
+    if (stooqCodes.length === 0) return [];
+
+    const url = `https://stooq.com/q/l/?s=${stooqCodes.join('+')}&f=sd2t2ohlc&h&e=csv`;
+    const res = await axios.get(url, { timeout: 5000 });
+    
+    // Parse CSV
+    const lines = res.data.split('\n');
+    lines.shift(); // Remove header
+
+    const results = [];
+    lines.forEach(line => {
+        const parts = line.split(',');
+        if (parts.length >= 7) {
+            const symbol = parts[0];
+            const price = parseFloat(parts[6]);
+            
+            const originalCode = codeMap[symbol];
+            if (originalCode && !isNaN(price)) {
+                results.push({
+                    code: originalCode,
+                    name: originalCode + ' (Stooq)',
+                    price: price,
+                    change: 0, // Stooq CSV simple format doesn't include change
+                    changePercent: 0,
+                    market_value: '-',
+                    pe: '-'
+                });
+            }
+        }
+    });
+    
+    return results;
 }
 
 
