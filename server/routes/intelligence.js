@@ -541,7 +541,9 @@ router.post('/refresh', async (req, res) => {
 // Schedule: Manual only (Disabled automatic)
 // cron.schedule('* * * * *', updateIntelligence);
 
-// Init
-updateIntelligence();
+// Init with delay to allow server startup
+setTimeout(() => {
+  updateIntelligence();
+}, 5000);
 
 module.exports = router;

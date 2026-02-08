@@ -31,4 +31,4 @@ ENV NODE_ENV=production
 ENV PORT=3001
 
 EXPOSE 3001
-CMD ["node", "index.js"]
+CMD ["node", "--max-old-space-size=512", "index.js"]

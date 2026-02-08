@@ -26,6 +26,11 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const LOGO_DIR = (process.env.VERCEL || process.env.ZEABUR) ? '/tmp/logos' : path.join(__dirname, 'public/logos');
 
+// Health Check Endpoint (Critical for Zeabur/Docker)
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
 // Ensure directories exist
 if (!fs.existsSync(LOGO_DIR)) {
   fs.mkdirSync(LOGO_DIR, { recursive: true });
@@ -95,5 +100,15 @@ if (!isVercel) {
     process.exit(1);
   }
 }
+
+// Global Error Handlers to prevent crash
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+  // Optional: Graceful shutdown logic
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
 
 module.exports = app;
