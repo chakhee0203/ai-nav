@@ -50,7 +50,7 @@ async function fetchMarketData() {
     console.log('Fetching market data from Yahoo Finance (Batched)...');
     
     // Batch request to Yahoo Finance
-    const results = await yahooFinance.quote(symbols, { validateResult: false });
+    const results = await yahooFinance.quote(symbols);
 
     if (results && Array.isArray(results)) {
       results.forEach(quote => {

@@ -222,7 +222,7 @@ async function fetchYahoo(codes) {
     });
 
     try {
-        const results = await yahooFinance.quote(yahooSymbols, { validateResult: false });
+        const results = await yahooFinance.quote(yahooSymbols);
 
         if (results && Array.isArray(results) && results.length > 0) {
             return results.map(r => {
