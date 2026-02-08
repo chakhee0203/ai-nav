@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const yahooFinance = require('yahoo-finance2').default; // Yahoo Finance 2
 const iconv = require('iconv-lite');
 const { openai } = require('../config/ai');
 
@@ -98,27 +99,24 @@ async function fetchYahooFallback(codes) {
     });
 
     try {
-        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahooSymbols.join(',')}`;
-        const yRes = await axios.get(quoteUrl, { 
-            timeout: 8000,
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-        });
-        const results = yRes.data.quoteResponse.result;
-        
-        if (!results) return [];
+        const results = await yahooFinance.quote(yahooSymbols);
 
-        return results.map(r => ({
-            code: r.symbol,
-            name: r.shortName || r.longName,
-            price: r.regularMarketPrice,
-            change: r.regularMarketChange,
-            changePercent: r.regularMarketChangePercent,
-            market_value: r.marketCap,
-            pe: r.trailingPE
-        }));
-
+        if (results && results.length > 0) {
+            return results.map(r => {
+                return {
+                    code: r.symbol, // Use symbol as code
+                    name: r.shortName || r.longName || r.symbol,
+                    price: r.regularMarketPrice,
+                    change: r.regularMarketChange,
+                    changePercent: r.regularMarketChangePercent,
+                    market_value: r.marketCap || '-',
+                    pe: r.trailingPE || '-'
+                };
+            });
+        }
+        return [];
     } catch (ey) {
-        console.error('Watchlist Yahoo Fallback Error:', ey.message);
+        console.error('Yahoo Watchlist Fallback Error:', ey.message);
         return [];
     }
 }

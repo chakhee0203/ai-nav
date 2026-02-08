@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const yahooFinance = require('yahoo-finance2').default; // Yahoo Finance 2
 const cheerio = require('cheerio');
 const iconv = require('iconv-lite');
 const cron = require('node-cron');
@@ -97,13 +98,8 @@ async function fetchMarketData() {
           const symbols = ['000001.SS', '399001.SZ', '^HSI', '3033.HK', 'GC=F', '^DJI'];
           const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbols.join(',')}?interval=1d&range=1d`; // Batch not supported this way in v8 chart, need loop or quote api
           
-          // Use quote API for batch: https://query1.finance.yahoo.com/v7/finance/quote?symbols=...
-          const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}`;
-          const yRes = await axios.get(quoteUrl, { 
-              timeout: 8000,
-              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-          });
-          const results = yRes.data.quoteResponse.result;
+          // Use yahoo-finance2 for reliable overseas access
+          const results = await yahooFinance.quote(symbols);
 
           if (results && results.length > 0) {
               const find = (sym) => results.find(r => r.symbol === sym);
@@ -249,12 +245,7 @@ async function fetchMarketData() {
       console.log('Sina flows failed, switching to Yahoo Finance fallback...');
       try {
           const symbols = ['DX-Y.NYB', 'CNY=X', 'CL=F', '^IXIC'];
-          const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}`;
-          const yRes = await axios.get(quoteUrl, { 
-              timeout: 8000,
-              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-          });
-          const results = yRes.data.quoteResponse.result;
+          const results = await yahooFinance.quote(symbols);
 
           if (results && results.length > 0) {
               const find = (sym) => results.find(r => r.symbol === sym);
@@ -285,8 +276,8 @@ async function fetchNews() {
 
   // 2.1 RSS 源 (优先国内源以保证连接性)
   const rssFeeds = [
-    { name: '界面新闻', url: 'https://a.jiemian.com/index.php?m=article&a=rss' }, // Business & Finance
-    { name: '中新网', url: 'http://www.chinanews.com.cn/rss/scroll-news.xml' },
+    { name: '36Kr', url: 'https://36kr.com/feed' }, // Tech & Business
+    { name: 'Google Finance', url: 'https://news.google.com/rss/search?q=finance+china&hl=zh-CN&gl=CN&ceid=CN:zh-CN' }, // Reliable Aggregator
     { name: '联合早报', url: 'https://www.zaobao.com.sg/rss/realtime/world.xml' }, // Global (Requires Cheerio fallback)
   ];
 
