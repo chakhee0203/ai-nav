@@ -80,59 +80,16 @@ async function fetchMarketData() {
     }
   }
 
-  // Fallback check: If critical data missing, try secondary source (Tencent) ONLY for missing items
-  // But per user request "Prioritize Yahoo", we only fallback if Yahoo completely failed or missed items
-  // For simplicity and "All Yahoo" preference, we might skip complex per-item fallback unless necessary.
-  // Let's keep it simple: Yahoo is Primary. If empty, maybe try Tencent as backup for CN stocks?
-  // User said "Prioritize Yahoo", implying others are secondary.
-  
+  // Fallback check: Removed as per user request to rely solely on Yahoo
   const hasData = Object.keys(market.stocks).length > 0;
   if (!hasData) {
-      console.log('Yahoo failed or returned no data, trying Tencent fallback for key indices...');
-      try {
-        await fetchTencentFallback(market);
-      } catch (e) {
-        console.error('Tencent Fallback failed:', e.message);
-      }
+      console.warn('Yahoo returned no data, but fallback is disabled.');
   }
 
   return market;
 }
 
-async function fetchTencentFallback(market) {
-    // Tencent Fallback Logic for CN/HK/US basic indices
-    const qtUrl = 'http://qt.gtimg.cn/q=sh000001,sz399001,hkHSI,hkHSTECH,hf_XAU,us.DJI,us.IXIC';
-    const qtRes = await axios.get(qtUrl, { 
-        responseType: 'arraybuffer',
-        timeout: 5000,
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    const qtData = iconv.decode(qtRes.data, 'gbk');
-    const lines = qtData.split(';');
 
-    const parse = (code, name, cat, key) => {
-        const line = lines.find(l => l.includes(`v_${code}=`));
-        if (line) {
-            const parts = line.split('"')[1].split('~');
-            if (parts.length > 30) {
-                 if (!market[cat]) market[cat] = {};
-                 market[cat][key] = {
-                     name: name,
-                     price: parseFloat(parts[3]),
-                     changePercent: parseFloat(parts[32])
-                 };
-            }
-        }
-    };
-
-    parse('sh000001', '上证指数', 'stocks', 'shanghai');
-    parse('sz399001', '深证成指', 'stocks', 'shenzhen');
-    parse('hkHSI', '恒生指数', 'stocks', 'hsi');
-    parse('hkHSTECH', '恒生科技', 'stocks', 'hstech');
-    parse('us.DJI', '道琼斯', 'stocks', 'dji');
-    parse('us.IXIC', '纳斯达克', 'stocks', 'nasdaq');
-    parse('hf_XAU', '伦敦金', 'gold', 'london');
-}
 
 // 2. 获取新闻 (RSS + 百度热搜)
 async function fetchNews() {
