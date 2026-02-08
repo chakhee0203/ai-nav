@@ -6,6 +6,13 @@
   .animate-fade-in {
     animation: fadeIn 0.5s ease-out forwards;
   }
+  .animate-marquee-vertical {
+    animation: marqueeVertical 15s linear infinite;
+  }
+  /* Pause animation on hover */
+  .group:hover .animate-marquee-vertical {
+    animation-play-state: paused;
+  }
 }
 
 @keyframes fadeIn {
@@ -17,4 +24,15 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes marqueeVertical {
+  0% { transform: translateY(0); }
+  /* We need to calculate based on item height + gap. 
+     Assuming each item block is roughly h-32 (8rem) + gap (2rem) = 10rem.
+     Ideally we want to scroll through all items.
+     For a smooth infinite loop, we often need duplicated items.
+     For now, let's just do a simple scroll up and reset.
+  */
+  100% { transform: translateY(-100%); } 
 }

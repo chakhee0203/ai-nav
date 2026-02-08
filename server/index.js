@@ -19,11 +19,8 @@ if (fs.existsSync(serverEnvPath)) {
   console.log('Loaded .env from default location');
 }
 
-const navRoutes = require('./routes/nav');
-const toolRoutes = require('./routes/tools');
-const pdfRoutes = require('./routes/pdf');
-const excelRoutes = require('./routes/excel');
-const analysisRoutes = require('./routes/analysis');
+const intelligenceRoutes = require('./routes/intelligence');
+const watchlistRoutes = require('./routes/watchlist');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,11 +38,8 @@ app.use(express.json({ limit: '50mb' }));
 app.use('/logos', express.static(LOGO_DIR));
 
 // 挂载路由
-app.use('/api/nav', navRoutes);
-app.use('/api/tools', toolRoutes);
-app.use('/api/pdf', pdfRoutes);
-app.use('/api/excel', excelRoutes);
-app.use('/api/analysis', analysisRoutes);
+app.use('/api/intelligence', intelligenceRoutes);
+app.use('/api/watchlist', watchlistRoutes);
 
 // Serve static files from the React client
 // Strategy: Find where index.html is located
