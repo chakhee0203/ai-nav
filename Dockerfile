@@ -15,9 +15,9 @@ RUN npm run build -- --outDir dist
 FROM node:20-alpine
 WORKDIR /app
 
-# Copy server dependency files
-COPY server/package*.json ./
-RUN npm install --production
+# Copy root dependency files (server deps are in root package.json)
+COPY package*.json ./
+RUN npm install --omit=dev
 
 # Copy server source code
 COPY server/ ./
