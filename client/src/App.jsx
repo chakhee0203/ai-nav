@@ -1,10 +1,10 @@
 import React from 'react';
-import IntelligenceStation from './components/IntelligenceStation';
 import './index.css';
+import SentimentWatchlistDashboard from './components/SentimentWatchlistDashboard';
 
 function App() {
   return (
-    <IntelligenceStation />
+    <SentimentWatchlistDashboard />
   );
 }
 

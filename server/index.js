@@ -1,114 +1,172 @@
 const express = require('express');
 const cors = require('cors');
-const requestIp = require('request-ip');
-const fs = require('fs');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+
+const { analyzeSymbol } = require('./skills/portfolioAgent');
+const { fetchQuote } = require('./services/marketData');
+const { fetchNews } = require('./services/news');
 const path = require('path');
 
-// Try to load .env from server directory first, then root
-const serverEnvPath = path.join(__dirname, '.env');
-const rootEnvPath = path.join(__dirname, '../.env');
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 30;
+const rateBuckets = new Map();
 
-if (fs.existsSync(serverEnvPath)) {
-  require('dotenv').config({ path: serverEnvPath });
-  console.log('Loaded .env from server directory');
-} else if (fs.existsSync(rootEnvPath)) {
-  require('dotenv').config({ path: rootEnvPath });
-  console.log('Loaded .env from root directory');
-} else {
-  require('dotenv').config(); // Fallback to default
-  console.log('Loaded .env from default location');
-}
+const getClientIp = (req) => {
+  const xf = req.headers['x-forwarded-for'];
+  if (typeof xf === 'string' && xf.trim()) return xf.split(',')[0].trim();
+  return req.ip || req.connection?.remoteAddress || 'unknown';
+};
 
-const intelligenceRoutes = require('./routes/intelligence');
-const watchlistRoutes = require('./routes/watchlist');
-
-const app = express();
-const PORT = process.env.PORT || 3001;
-const LOGO_DIR = (process.env.VERCEL || process.env.ZEABUR) ? '/tmp/logos' : path.join(__dirname, 'public/logos');
-
-// Health Check Endpoint (Critical for Zeabur/Docker)
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
-// Ensure directories exist
-if (!fs.existsSync(LOGO_DIR)) {
-  fs.mkdirSync(LOGO_DIR, { recursive: true });
-}
-
-// 使用 request-ip 中间件
-app.use(requestIp.mw());
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use('/logos', express.static(LOGO_DIR));
-
-// 挂载路由
-app.use('/api/intelligence', intelligenceRoutes);
-app.use('/api/watchlist', watchlistRoutes);
-
-// Serve static files from the React client
-// Strategy: Find where index.html is located
-const localPublicPath = path.join(__dirname, 'public');
-const rootPublicPath = path.join(__dirname, '../public');
-const clientDistPath = path.join(__dirname, '../client/dist');
-
-let staticDir = null;
-
-if (fs.existsSync(path.join(localPublicPath, 'index.html'))) {
-  console.log('Found React app in ./public (Docker/Merged)');
-  staticDir = localPublicPath;
-} else if (fs.existsSync(path.join(rootPublicPath, 'index.html'))) {
-  console.log('Found React app in ../public (Vercel/Local)');
-  staticDir = rootPublicPath;
-} else if (fs.existsSync(path.join(clientDistPath, 'index.html'))) {
-  console.log('Found React app in ../client/dist (Legacy)');
-  staticDir = clientDistPath;
-}
-
-if (staticDir) {
-  app.use(express.static(staticDir));
-  app.get('*', (req, res) => {
-    // Exclude API routes and logos from wildcard match (handled by express router order, but good to be safe)
-    if (req.path.startsWith('/api') || req.path.startsWith('/logos')) {
-      return res.status(404).send('Not Found');
-    }
-    res.sendFile(path.join(staticDir, 'index.html'));
-  });
-} else {
-  console.log('Warning: No React app build found. API only mode.');
-}
-
-// Export for Vercel
-const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true'; // Vercel sets this to '1'
-
-if (!isVercel) {
-  const host = '0.0.0.0';
-  console.log('Starting server...');
-  try {
-    const server = app.listen(PORT, host, () => {
-      console.log(`Server is running on http://${host}:${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV}`);
-      console.log(`Static Directory: ${staticDir || 'None'}`);
-    });
-
-    server.on('error', (e) => {
-      console.error('Server startup error:', e);
-      process.exit(1);
-    });
-  } catch (e) {
-    console.error('Failed to start server:', e);
-    process.exit(1);
+const checkRateLimit = (req) => {
+  const now = Date.now();
+  const key = getClientIp(req);
+  const entry = rateBuckets.get(key) || { count: 0, start: now };
+  if (now - entry.start >= RATE_LIMIT_WINDOW_MS) {
+    entry.count = 0;
+    entry.start = now;
   }
+  entry.count += 1;
+  rateBuckets.set(key, entry);
+  const remainingMs = RATE_LIMIT_WINDOW_MS - (now - entry.start);
+  return {
+    allowed: entry.count <= RATE_LIMIT_MAX,
+    retryAfter: Math.max(1, Math.ceil(remainingMs / 1000)),
+  };
+};
+
+const normalizeCodes = (codes) => {
+  return codes
+    .map(c => String(c ?? '').trim())
+    .filter(Boolean)
+    .map(c => c.toUpperCase());
+};
+
+const isValidCode = (code) => {
+  if (!code || code.length > 16) return false;
+  if (/^\d{6}$/.test(code)) return true;
+  if (/^(SH|SZ)\d{6}$/.test(code)) return true;
+  if (/^\d{6}\.(SS|SZ)$/.test(code)) return true;
+  if (/^[A-Z0-9.\-]{1,10}$/.test(code)) return true;
+  return false;
+};
+
+app.post('/api/analyze', (req, res) => {
+  const rate = checkRateLimit(req);
+  if (!rate.allowed) {
+    res.set('Retry-After', String(rate.retryAfter));
+    return res.status(429).json({ error: 'Too Many Requests' });
+  }
+
+  const { codes } = req.body;
+
+  if (!codes || !Array.isArray(codes)) {
+    return res.status(400).json({ error: 'Invalid input. Expected an array of codes.' });
+  }
+
+  const normalized = normalizeCodes(codes);
+  if (!normalized.length) {
+    return res.status(400).json({ error: 'Invalid input. Expected non-empty codes.' });
+  }
+  if (normalized.length > 10) {
+    return res.status(400).json({ error: 'Too many codes. Max 10.' });
+  }
+  const invalid = normalized.filter(c => !isValidCode(c));
+  if (invalid.length) {
+    return res.status(400).json({ error: 'Invalid code format.', invalid });
+  }
+
+  Promise.all(normalized.map(code => analyzeSymbol(code)))
+    .then(results => res.json({ results }))
+    .catch(err => {
+      console.error(err);
+      res.status(500).json({ error: 'Analysis failed' });
+    });
+
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.get('/api/quote', async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.status(400).json({ error: 'code is required' });
+  try {
+    const q = await fetchQuote(String(code).trim());
+    res.json(q || null);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Quote fetch failed' });
+  }
+});
+
+app.get('/api/news/related', async (req, res) => {
+  const { code, q } = req.query;
+  const queries = [];
+  try {
+    let name = '';
+    if (code) {
+      const quote = await fetchQuote(String(code).trim());
+      name = quote?.name || '';
+    }
+    if (q) queries.push(String(q).trim());
+    if (code) queries.push(String(code).trim());
+    if (name) {
+      queries.push(name);
+      queries.push(`${name} 行业`);
+      queries.push(`${name} 公司`);
+      queries.push(`${name} 政策`);
+    }
+    // Expand for CN six-digit codes
+    const s = String(code || '').trim().toUpperCase();
+    const m = s.match(/^(\d{6})$/);
+    if (m) {
+      const digits = m[1];
+      queries.push(`SH${digits}`);
+      queries.push(`SZ${digits}`);
+      queries.push(`${digits}.SS`);
+      queries.push(`${digits}.SZ`);
+      queries.push(`${digits} 政策`);
+      queries.push(`${digits} 行业`);
+    }
+    const uniq = new Map();
+    for (const query of queries) {
+      if (!query) continue;
+      const items = await fetchNews(query, { limit: 10 });
+      items.forEach((it) => {
+        const key = it.link || it.title;
+        if (!uniq.has(key)) uniq.set(key, { ...it, query });
+      });
+    }
+    let results = Array.from(uniq.values());
+    if (!results.length && name) {
+      // Fallback: query company name alone
+      const items = await fetchNews(name, { limit: 10 });
+      results = items.map(it => ({ ...it, query: name }));
+    }
+    res.json({ results: results.slice(0, 20) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Related news fetch failed' });
+  }
+});
+
+// Serve built frontend
+const staticDir = path.join(__dirname, '../public');
+app.use(express.static(staticDir));
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) return next();
+  res.sendFile(path.join(staticDir, 'index.html'));
+});
+
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+  });
 }
-
-// Global Error Handlers to prevent crash
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
-  // Optional: Graceful shutdown logic
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('UNHANDLED REJECTION:', reason);
-});
 
 module.exports = app;
