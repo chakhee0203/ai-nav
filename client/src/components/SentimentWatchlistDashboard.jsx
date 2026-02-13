@@ -9,15 +9,12 @@ const SentimentWatchlistDashboard = () => {
   const [newQuote, setNewQuote] = useState(null);
   const [newQuoteLoading, setNewQuoteLoading] = useState(false);
   const [newQuoteError, setNewQuoteError] = useState(null);
-  const [analysisResults, setAnalysisResults] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [analysisByCode, setAnalysisByCode] = useState({});
+  const [analysisLoading, setAnalysisLoading] = useState({});
+  const [analysisError, setAnalysisError] = useState({});
   const [error, setError] = useState(null);
   const [quotes, setQuotes] = useState({});
-  const [relatedNews, setRelatedNews] = useState(null);
-  const [relatedLoading, setRelatedLoading] = useState(false);
-  const [relatedError, setRelatedError] = useState(null);
   const [discoverResults, setDiscoverResults] = useState([]);
-  const [discoverOpen, setDiscoverOpen] = useState(false);
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [view, setView] = useState('portfolio');
 
@@ -140,6 +137,25 @@ const SentimentWatchlistDashboard = () => {
     });
   };
 
+  const analyzeOne = async (code) => {
+    setAnalysisLoading(prev => ({ ...prev, [code]: true }));
+    setAnalysisError(prev => ({ ...prev, [code]: null }));
+    try {
+      const { data } = await axios.post('/api/analyze', { codes: [code] });
+      const item = data?.results?.[0] || null;
+      if (!item) {
+        setAnalysisError(prev => ({ ...prev, [code]: '暂无分析结果' }));
+      } else {
+        setAnalysisByCode(prev => ({ ...prev, [code]: item }));
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.error || '分析失败，请稍后重试';
+      setAnalysisError(prev => ({ ...prev, [code]: msg }));
+    } finally {
+      setAnalysisLoading(prev => ({ ...prev, [code]: false }));
+    }
+  };
+
   useEffect(() => {
     const needInit = portfolio.filter(it => !it.entryPrice);
     if (needInit.length) {
@@ -257,11 +273,6 @@ const SentimentWatchlistDashboard = () => {
     setDiscoverLoading(false);
   };
 
-  const closeDiscover = () => {
-    setDiscoverOpen(false);
-    setDiscoverLoading(false);
-    setDiscoverResults([]);
-  };
   const backToPortfolio = () => {
     setView('portfolio');
     setDiscoverLoading(false);
@@ -421,6 +432,60 @@ const SentimentWatchlistDashboard = () => {
                         </span>
                       ) : null}
                     </span>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => analyzeOne(item.code)}
+                        disabled={analysisLoading[item.code]}
+                        className={`text-xs px-2 py-1 rounded border ${
+                          analysisLoading[item.code] ? 'bg-gray-200 text-gray-500 border-gray-200' : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                        }`}
+                      >
+                        {analysisLoading[item.code] ? '分析中...' : (analysisByCode[item.code] ? '重新分析' : '立即分析')}
+                      </button>
+                      {analysisError[item.code] ? (
+                        <span className="text-xs text-red-600">{analysisError[item.code]}</span>
+                      ) : null}
+                    </div>
+                    {analysisByCode[item.code] ? (
+                      <div className="mt-2 rounded-lg border border-gray-200 bg-white p-2 text-xs text-gray-700">
+                        <div className="font-semibold text-gray-800">分析摘要</div>
+                        <div className="mt-1 whitespace-pre-wrap leading-relaxed">
+                          {analysisByCode[item.code]?.analysis || '暂无内容'}
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <div className="bg-gray-50 p-2 rounded">
+                            <div className="text-gray-500">最新财报</div>
+                            <div className="mt-1">
+                              营收 {analysisByCode[item.code]?.financials?.revenue ?? '未知'}<br />
+                              净利 {analysisByCode[item.code]?.financials?.netIncome ?? '未知'}<br />
+                              币种 {analysisByCode[item.code]?.financials?.currency ?? '未知'}
+                            </div>
+                          </div>
+                          <div className="bg-gray-50 p-2 rounded">
+                            <div className="text-gray-500">走势</div>
+                            <div className="mt-1">
+                              现价 {analysisByCode[item.code]?.quote?.price ?? '未知'} {analysisByCode[item.code]?.quote?.currency ?? ''}<br />
+                              20日收益 {analysisByCode[item.code]?.trend?.ret20 != null ? `${(analysisByCode[item.code].trend.ret20 * 100).toFixed(2)}%` : '未知'}
+                            </div>
+                          </div>
+                        </div>
+                        {analysisByCode[item.code]?.news?.length ? (
+                          <div className="mt-2">
+                            <div className="text-gray-500 font-semibold">相关新闻</div>
+                            <ul className="mt-1 space-y-1">
+                              {analysisByCode[item.code].news.slice(0, 5).map((n, idx) => (
+                                <li key={`${item.code}-${idx}`} className="leading-snug">
+                                  <a href={n.link} target="_blank" rel="noreferrer" className="hover:text-blue-600">
+                                    {n.title}
+                                  </a>
+                                  {n.topic ? <span className="ml-1 text-gray-400">（{n.topic}）</span> : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   <button
                     onClick={() => removeCode(item.code)}
@@ -440,19 +505,12 @@ const SentimentWatchlistDashboard = () => {
             {Math.round(totalWeight()) !== 100 ? <span className="ml-2 text-gray-500">建议合计为 100%</span> : null}
           </div>
         </div>
-
-        {/* 分析持仓功能已删除 */}
-
         {/* 错误信息 */}
         {error && (
           <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
             {error}
           </div>
         )}
-
-        {/* 分析结果已删除 */}
-
-        {/* 相关新闻弹窗已删除 */}
         </>)}
       </main>
 

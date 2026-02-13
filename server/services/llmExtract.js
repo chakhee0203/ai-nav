@@ -51,4 +51,6 @@ async function extractPriceFromHtml(html, symbol) {
 
 module.exports = {
   extractPriceFromHtml,
+  chatLLM,
+  pickLLM,
 }
