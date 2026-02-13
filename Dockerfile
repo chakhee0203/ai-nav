@@ -28,7 +28,6 @@ COPY --from=client-builder /app/client/dist ./public
 
 # Environment variables
 ENV NODE_ENV=production
-ENV PORT=3001
 
-EXPOSE 3001
-CMD ["node", "--max-old-space-size=512", "index.js"]
+EXPOSE 3000
+CMD ["node", "index.js"]

@@ -163,18 +163,22 @@ async function fetchHistory(symbol, { start, end, interval = '1d' } = {}) {
       sym
     )}?interval=${interval}&range=1y`;
   }
-  const { data } = await axios.get(url, { headers: { 'User-Agent': UA } });
-  const result = data?.chart?.result?.[0];
-  if (!result) return null;
-  const timestamps = result.timestamp || [];
-  const closes = result.indicators?.quote?.[0]?.close || [];
-  const series = timestamps
-    .map((t, i) => ({
-      date: new Date(t * 1000).toISOString().slice(0, 10),
-      close: closes[i],
-    }))
-    .filter((p) => Number.isFinite(p.close));
-  return { symbol, series };
+  try {
+    const { data } = await axios.get(url, { headers: { 'User-Agent': UA } });
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+    const timestamps = result.timestamp || [];
+    const closes = result.indicators?.quote?.[0]?.close || [];
+    const series = timestamps
+      .map((t, i) => ({
+        date: new Date(t * 1000).toISOString().slice(0, 10),
+        close: closes[i],
+      }))
+      .filter((p) => Number.isFinite(p.close));
+    return { symbol, series };
+  } catch {
+    return null;
+  }
 }
 
 async function fetchQuoteLLM(symbol) {

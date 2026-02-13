@@ -12,6 +12,8 @@ const SentimentWatchlistDashboard = () => {
   const [analysisByCode, setAnalysisByCode] = useState({});
   const [analysisLoading, setAnalysisLoading] = useState({});
   const [analysisError, setAnalysisError] = useState({});
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerCode, setDrawerCode] = useState(null);
   const [error, setError] = useState(null);
   const [quotes, setQuotes] = useState({});
   const [discoverResults, setDiscoverResults] = useState([]);
@@ -154,6 +156,17 @@ const SentimentWatchlistDashboard = () => {
     } finally {
       setAnalysisLoading(prev => ({ ...prev, [code]: false }));
     }
+  };
+  const openDrawer = (code) => {
+    setDrawerCode(code);
+    setDrawerOpen(true);
+  };
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+  };
+  const handleAnalyze = (code) => {
+    openDrawer(code);
+    if (!analysisByCode[code]) analyzeOne(code);
   };
 
   useEffect(() => {
@@ -434,58 +447,18 @@ const SentimentWatchlistDashboard = () => {
                     </span>
                     <div className="mt-2 flex items-center gap-2">
                       <button
-                        onClick={() => analyzeOne(item.code)}
+                        onClick={() => handleAnalyze(item.code)}
                         disabled={analysisLoading[item.code]}
                         className={`text-xs px-2 py-1 rounded border ${
                           analysisLoading[item.code] ? 'bg-gray-200 text-gray-500 border-gray-200' : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
                         }`}
                       >
-                        {analysisLoading[item.code] ? '分析中...' : (analysisByCode[item.code] ? '重新分析' : '立即分析')}
+                        {analysisLoading[item.code] ? '分析中...' : (analysisByCode[item.code] ? '查看分析' : '立即分析')}
                       </button>
                       {analysisError[item.code] ? (
                         <span className="text-xs text-red-600">{analysisError[item.code]}</span>
                       ) : null}
                     </div>
-                    {analysisByCode[item.code] ? (
-                      <div className="mt-2 rounded-lg border border-gray-200 bg-white p-2 text-xs text-gray-700">
-                        <div className="font-semibold text-gray-800">分析摘要</div>
-                        <div className="mt-1 whitespace-pre-wrap leading-relaxed">
-                          {analysisByCode[item.code]?.analysis || '暂无内容'}
-                        </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2">
-                          <div className="bg-gray-50 p-2 rounded">
-                            <div className="text-gray-500">最新财报</div>
-                            <div className="mt-1">
-                              营收 {analysisByCode[item.code]?.financials?.revenue ?? '未知'}<br />
-                              净利 {analysisByCode[item.code]?.financials?.netIncome ?? '未知'}<br />
-                              币种 {analysisByCode[item.code]?.financials?.currency ?? '未知'}
-                            </div>
-                          </div>
-                          <div className="bg-gray-50 p-2 rounded">
-                            <div className="text-gray-500">走势</div>
-                            <div className="mt-1">
-                              现价 {analysisByCode[item.code]?.quote?.price ?? '未知'} {analysisByCode[item.code]?.quote?.currency ?? ''}<br />
-                              20日收益 {analysisByCode[item.code]?.trend?.ret20 != null ? `${(analysisByCode[item.code].trend.ret20 * 100).toFixed(2)}%` : '未知'}
-                            </div>
-                          </div>
-                        </div>
-                        {analysisByCode[item.code]?.news?.length ? (
-                          <div className="mt-2">
-                            <div className="text-gray-500 font-semibold">相关新闻</div>
-                            <ul className="mt-1 space-y-1">
-                              {analysisByCode[item.code].news.slice(0, 5).map((n, idx) => (
-                                <li key={`${item.code}-${idx}`} className="leading-snug">
-                                  <a href={n.link} target="_blank" rel="noreferrer" className="hover:text-blue-600">
-                                    {n.title}
-                                  </a>
-                                  {n.topic ? <span className="ml-1 text-gray-400">（{n.topic}）</span> : null}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </div>
                   <button
                     onClick={() => removeCode(item.code)}
@@ -513,6 +486,131 @@ const SentimentWatchlistDashboard = () => {
         )}
         </>)}
       </main>
+
+      {drawerOpen ? (
+        <div className="fixed inset-0 z-30">
+          <div className="absolute inset-0 bg-black/40" onClick={closeDrawer}></div>
+          <div
+            className="absolute right-0 top-0 h-full w-full sm:w-[440px] bg-white shadow-xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="font-semibold text-gray-800">
+                分析详情 {drawerCode ? `· ${drawerCode}` : ''}
+              </div>
+              <div className="flex items-center gap-2">
+                {drawerCode ? (
+                  <button
+                    onClick={() => analyzeOne(drawerCode)}
+                    disabled={analysisLoading[drawerCode]}
+                    className={`text-xs px-2 py-1 rounded border ${
+                      analysisLoading[drawerCode] ? 'bg-gray-200 text-gray-500 border-gray-200' : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                    }`}
+                  >
+                    {analysisLoading[drawerCode] ? '分析中...' : '重新分析'}
+                  </button>
+                ) : null}
+                <button
+                  onClick={closeDrawer}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+            <div className="p-4 overflow-auto flex-1 text-sm text-gray-700">
+              {drawerCode && analysisLoading[drawerCode] ? (
+                <div className="text-gray-600">正在获取最新分析…</div>
+              ) : drawerCode && analysisError[drawerCode] ? (
+                <div className="text-red-600">{analysisError[drawerCode]}</div>
+              ) : drawerCode && analysisByCode[drawerCode] ? (
+                <>
+                  <div className="font-semibold text-gray-800">分析摘要</div>
+                  <div className="mt-2 whitespace-pre-wrap leading-relaxed">
+                    {analysisByCode[drawerCode]?.analysis || '暂无内容'}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="bg-gray-50 p-2 rounded">
+                      <div className="text-gray-500">最新财报</div>
+                      <div className="mt-1">
+                        营收 {analysisByCode[drawerCode]?.financials?.revenue ?? '未知'}<br />
+                        净利 {analysisByCode[drawerCode]?.financials?.netIncome ?? '未知'}<br />
+                        币种 {analysisByCode[drawerCode]?.financials?.currency ?? '未知'}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded">
+                      <div className="text-gray-500">走势</div>
+                      <div className="mt-1">
+                        现价 {analysisByCode[drawerCode]?.quote?.price ?? '未知'} {analysisByCode[drawerCode]?.quote?.currency ?? ''}<br />
+                        20日收益 {analysisByCode[drawerCode]?.trend?.ret20 != null ? `${(analysisByCode[drawerCode].trend.ret20 * 100).toFixed(2)}%` : '未知'}
+                      </div>
+                    </div>
+                  </div>
+                  {analysisByCode[drawerCode]?.newsByTopic?.policy?.length ? (
+                    <div className="mt-3">
+                      <div className="text-gray-500 font-semibold">政策新闻</div>
+                      <ul className="mt-1 space-y-1">
+                        {analysisByCode[drawerCode].newsByTopic.policy.slice(0, 5).map((n, idx) => (
+                          <li key={`policy-${idx}`} className="leading-snug">
+                            <a href={n.link} target="_blank" rel="noreferrer" className="hover:text-blue-600">
+                              {n.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {analysisByCode[drawerCode]?.newsByTopic?.industry?.length ? (
+                    <div className="mt-3">
+                      <div className="text-gray-500 font-semibold">行业新闻</div>
+                      <ul className="mt-1 space-y-1">
+                        {analysisByCode[drawerCode].newsByTopic.industry.slice(0, 5).map((n, idx) => (
+                          <li key={`industry-${idx}`} className="leading-snug">
+                            <a href={n.link} target="_blank" rel="noreferrer" className="hover:text-blue-600">
+                              {n.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {analysisByCode[drawerCode]?.newsByTopic?.finance?.length ? (
+                    <div className="mt-3">
+                      <div className="text-gray-500 font-semibold">财报新闻</div>
+                      <ul className="mt-1 space-y-1">
+                        {analysisByCode[drawerCode].newsByTopic.finance.slice(0, 5).map((n, idx) => (
+                          <li key={`finance-${idx}`} className="leading-snug">
+                            <a href={n.link} target="_blank" rel="noreferrer" className="hover:text-blue-600">
+                              {n.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {analysisByCode[drawerCode]?.news?.length ? (
+                    <div className="mt-3">
+                      <div className="text-gray-500 font-semibold">公司相关新闻</div>
+                      <ul className="mt-1 space-y-1">
+                        {analysisByCode[drawerCode].news.slice(0, 5).map((n, idx) => (
+                          <li key={`company-${idx}`} className="leading-snug">
+                            <a href={n.link} target="_blank" rel="noreferrer" className="hover:text-blue-600">
+                              {n.title}
+                            </a>
+                            {n.topic ? <span className="ml-1 text-gray-400">（{n.topic}）</span> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="text-gray-600">暂无分析数据</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* 底部导航（示例） */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around p-3 text-xs text-gray-500">
