@@ -20,14 +20,13 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 # Copy server source code
-COPY server/ ./
+COPY server/ ./server
 
-# Copy built client assets to server's public directory
-# server/index.js supports serving from ./public
+# Copy built client assets to public directory
 COPY --from=client-builder /app/client/dist ./public
 
 # Environment variables
 ENV NODE_ENV=production
 
 EXPOSE 3000
-CMD ["node", "index.js"]
+CMD ["node", "server/index.js"]

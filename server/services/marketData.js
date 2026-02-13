@@ -163,19 +163,47 @@ async function fetchHistory(symbol, { start, end, interval = '1d' } = {}) {
       sym
     )}?interval=${interval}&range=1y`;
   }
+  let yahooSeries = null;
   try {
     const { data } = await axios.get(url, { headers: { 'User-Agent': UA } });
     const result = data?.chart?.result?.[0];
-    if (!result) return null;
-    const timestamps = result.timestamp || [];
-    const closes = result.indicators?.quote?.[0]?.close || [];
-    const series = timestamps
-      .map((t, i) => ({
-        date: new Date(t * 1000).toISOString().slice(0, 10),
-        close: closes[i],
+    if (result) {
+      const timestamps = result.timestamp || [];
+      const closes = result.indicators?.quote?.[0]?.close || [];
+      const series = timestamps
+        .map((t, i) => ({
+          date: new Date(t * 1000).toISOString().slice(0, 10),
+          close: closes[i],
+        }))
+        .filter((p) => Number.isFinite(p.close));
+      if (series.length) {
+        yahooSeries = { symbol, series };
+      }
+    }
+  } catch {}
+  if (yahooSeries) return yahooSeries;
+  if (!isCnSymbol(symbol)) return null;
+  return fetchHistoryTencent(symbol);
+}
+
+async function fetchHistoryTencent(symbol, count = 120) {
+  const code = toCnPrefix(symbol);
+  if (!/^s[hz]\d{6}$/.test(code)) return null;
+  const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${encodeURIComponent(
+    code
+  )},day,,,${count},qfq`;
+  try {
+    const { data } = await axios.get(url, { headers: { 'User-Agent': UA, 'Referer': 'https://qt.gtimg.cn' } });
+    const node = data?.data?.[code];
+    const seriesRaw = node?.qfqday || node?.day || [];
+    if (!Array.isArray(seriesRaw) || !seriesRaw.length) return null;
+    const series = seriesRaw
+      .map((row) => ({
+        date: row?.[0],
+        close: Number(row?.[2]),
       }))
-      .filter((p) => Number.isFinite(p.close));
-    return { symbol, series };
+      .filter((p) => p.date && Number.isFinite(p.close));
+    return series.length ? { symbol, series } : null;
   } catch {
     return null;
   }
