@@ -9,6 +9,7 @@ const DiscoverPanel = ({
   tabs,
   activeTab,
   onTabChange,
+  onFetch,
 }) => {
   const formatDate = (v) => {
     if (!v) return '';
@@ -18,12 +19,24 @@ const DiscoverPanel = ({
   };
   const activeTitle = tabs.find(t => t.key === activeTab)?.title || '';
   const isPolicy = activeTab === 'policy';
+  const shouldPromptFetch = !discoverLoading && !discoverError && !discoverUpdatedAt;
+  const heatColors = ['bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-yellow-500', 'bg-lime-500', 'bg-emerald-500', 'bg-teal-500', 'bg-cyan-500', 'bg-sky-500', 'bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-fuchsia-500', 'bg-pink-500'];
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
       <div className="px-5 py-4 border-b border-slate-200">
-        <div>
-          <div className="text-base font-semibold text-slate-900">发现 · 资讯模块</div>
-          <div className="text-xs text-slate-500 mt-1">点击模块获取最新政策、大事件与热点</div>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-base font-semibold text-slate-900">发现 · 资讯模块</div>
+            <div className="text-xs text-slate-500 mt-1">每个模块点击获取后可在右上角更新</div>
+          </div>
+          {discoverUpdatedAt ? (
+            <button
+              onClick={onFetch}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            >
+              更新
+            </button>
+          ) : null}
         </div>
         <div className="mt-4 flex items-center gap-2 flex-wrap">
           {tabs.map(tab => (
@@ -42,6 +55,16 @@ const DiscoverPanel = ({
           <div className="text-sm text-slate-600">{activeTitle ? `正在获取${activeTitle}…` : '正在获取最新信息…'}</div>
         ) : discoverError ? (
           <div className="text-sm text-red-600">{discoverError}</div>
+        ) : shouldPromptFetch ? (
+          <div className="py-10 flex flex-col items-center gap-3 text-sm text-slate-500">
+            <div>{activeTitle ? `当前未获取${activeTitle}` : '当前未获取内容'}</div>
+            <button
+              onClick={onFetch}
+              className="text-xs px-4 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            >
+              点击获取
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
             {discoverUpdatedAt && (
@@ -69,6 +92,34 @@ const DiscoverPanel = ({
                   </div>
                 ))}
                 {!discoverPolicyCategories.length && <div className="text-sm text-slate-500">暂无结果</div>}
+              </div>
+            ) : activeTab === 'hot' ? (
+              <div className="space-y-4">
+                <div className="text-xs text-slate-500">热度越高，点越大</div>
+                <div className="flex flex-wrap gap-4">
+                  {discoverItems.map((rn, i) => {
+                    const size = Math.max(14, 44 - i * 1.4);
+                    const color = heatColors[i % heatColors.length];
+                    return (
+                      <a
+                        key={i}
+                        href={rn.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-20 flex flex-col items-center gap-2 group"
+                      >
+                        <div
+                          className={`${color} rounded-full shadow-sm`}
+                          style={{ width: size, height: size, opacity: 0.9 }}
+                        />
+                        <div className="text-[11px] text-slate-600 text-center break-words">
+                          {rn.title}
+                        </div>
+                      </a>
+                    );
+                  })}
+                  {!discoverItems.length && <div className="text-sm text-slate-500">暂无结果</div>}
+                </div>
               </div>
             ) : (
               <ul className="space-y-2">

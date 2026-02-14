@@ -72,9 +72,8 @@ const PortfolioPanel = ({
                         <input
                           type="number"
                           min={0}
-                          max={100}
                           step={0.1}
-                          value={Number(item.weight ?? 0)}
+                          value={item.weight ?? ''}
                           onChange={(e) => setWeight(item.code, e.target.value)}
                           className="w-20 border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />

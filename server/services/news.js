@@ -15,7 +15,7 @@ const parser = new Parser({
   },
 });
 
-const parseItemsFromXml = (xml, limit) => {
+const parseItemsFromXml = (xml, limit, defaultSource = 'Google News') => {
   const $ = cheerio.load(xml, { xmlMode: true });
   const items = [];
   $('item').each((_, el) => {
@@ -28,7 +28,7 @@ const parseItemsFromXml = (xml, limit) => {
       title,
       link,
       pubDate,
-      source: source || 'Google News',
+      source: source || defaultSource,
     });
   });
   return items.slice(0, limit);
@@ -41,15 +41,31 @@ async function fetchNews(symbol, { limit = 5 } = {}) {
     `https://news.google.com/rss/search?q=${query}&hl=en-US&gl=US&ceid=US:en`,
     `https://r.jina.ai/http://news.google.com/rss/search?q=${query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`,
     `https://r.jina.ai/http://news.google.com/rss/search?q=${query}&hl=en-US&gl=US&ceid=US:en`,
+    `https://www.bing.com/news/search?q=${query}&format=rss&setlang=zh-cn&cc=CN`,
+    `https://www.bing.com/news/search?q=${query}&format=rss&setlang=en-us&cc=US`,
+    `https://cn.bing.com/news/search?q=${query}&format=rss&setlang=zh-cn&cc=CN`,
+    `https://cn.bing.com/news/search?q=${query}&format=rss&setlang=en-us&cc=US`,
   ];
   for (const feedUrl of feedUrls) {
     try {
+      const isBing = feedUrl.includes('bing.com');
+      const headers = {
+        'User-Agent': UA,
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      };
+      if (isBing) {
+        headers.Accept = 'application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.7';
+        headers['Accept-Encoding'] = 'gzip, deflate';
+        headers.Referer = 'https://www.bing.com/news';
+      }
       const resp = await axios.get(feedUrl, {
-        headers: { 'User-Agent': UA, 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' },
+        headers,
         timeout: 10000,
         responseType: 'text',
+        maxRedirects: 5,
       });
-      const xmlItems = parseItemsFromXml(resp.data, limit);
+      const defaultSource = feedUrl.includes('bing.com') ? 'Bing News' : 'Google News';
+      const xmlItems = parseItemsFromXml(resp.data, limit, defaultSource);
       if (xmlItems.length) return xmlItems;
       const feed = await parser.parseString(resp.data);
       const items = (feed.items || []).slice(0, limit);
@@ -58,7 +74,7 @@ async function fetchNews(symbol, { limit = 5 } = {}) {
           title: it.title,
           link: it.link,
           pubDate: it.pubDate,
-          source: it.source || 'Google News',
+          source: it.source || defaultSource,
         }));
       }
     } catch (e) {

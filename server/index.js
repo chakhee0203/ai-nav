@@ -163,9 +163,9 @@ app.get('/api/news/discover', async (req, res) => {
   }
   const { section } = req.query;
   const sections = [
-    { key: 'policy', title: '最新政策', queries: ['政策', '宏观政策', '产业政策'] },
-    { key: 'event', title: '大事件', queries: ['重大事件', '重要会议', '突发事件'] },
-    { key: 'hot', title: '热点', queries: ['市场热点', '行业热点', '经济热点'] },
+    { key: 'policy', title: '最新政策', queries: ['十五五规划', '两会 政府工作报告', '中央经济工作会议', '国务院常务会议 经济'] },
+    { key: 'event', title: '大事件', queries: ['美联储 降息', 'FOMC 利率决议', '非农 就业 数据', '美国 CPI 通胀', '欧洲央行 利率决议'] },
+    { key: 'hot', title: '热点', queries: ['市场热点', '板块 热点', '主题 投资 热点', '资金 热点', 'A股 热点'] },
   ];
   try {
     const buildSection = async (target) => {
@@ -204,12 +204,9 @@ app.get('/api/news/policy-impact', async (req, res) => {
   }
   const year = Number(req.query.year) || new Date().getFullYear();
   const categories = [
-    { key: 'macro', title: '宏观政策', queries: [`${year} 宏观政策 市场 影响`, `${year} 经济政策 市场 影响`, `${year} 政策 影响 市场`] },
-    { key: 'monetary', title: '货币政策', queries: [`${year} 货币政策 市场 影响`, `${year} 降准 降息 市场 影响`, `${year} 流动性 政策`] },
-    { key: 'fiscal', title: '财政政策', queries: [`${year} 财政政策 市场 影响`, `${year} 税收 政策 市场 影响`, `${year} 国债 发行 政策`] },
-    { key: 'capital', title: '资本市场', queries: [`${year} 资本市场 政策`, `${year} 证券 监管 政策`, `${year} IPO 政策 市场 影响`] },
-    { key: 'property', title: '房地产与基建', queries: [`${year} 房地产 政策 市场 影响`, `${year} 基建 投资 政策`, `${year} 城市 更新 政策`] },
-    { key: 'industry', title: '产业与科技', queries: [`${year} 产业政策 市场 影响`, `${year} 科技 政策 市场 影响`, `${year} 制造业 政策`] },
+    { key: 'plan', title: '十五五规划', queries: [`${year} 十五五规划`, '十五五 规划 纲要', '十五五 规划 重点任务'] },
+    { key: 'lianghui', title: '两会政策', queries: [`${year} 两会 政府工作报告`, `${year} 两会 经济 政策`, `${year} 两会 政策 要点`] },
+    { key: 'meeting', title: '重要经济会议', queries: [`${year} 中央经济工作会议`, `${year} 国务院常务会议 经济`, `${year} 全国金融工作会议`] },
   ];
   try {
     const results = [];

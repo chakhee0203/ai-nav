@@ -20,12 +20,14 @@ const SentimentWatchlistDashboard = () => {
   const [drawerCode, setDrawerCode] = useState(null);
   const [error, setError] = useState(null);
   const [quotes, setQuotes] = useState({});
-  const [discoverItems, setDiscoverItems] = useState([]);
-  const [discoverPolicyCategories, setDiscoverPolicyCategories] = useState([]);
-  const [discoverUpdatedAt, setDiscoverUpdatedAt] = useState(null);
   const [discoverActiveTab, setDiscoverActiveTab] = useState('policy');
-  const [discoverLoading, setDiscoverLoading] = useState(false);
-  const [discoverError, setDiscoverError] = useState(null);
+  const [discoverLoadingTab, setDiscoverLoadingTab] = useState(null);
+  const [discoverErrorByTab, setDiscoverErrorByTab] = useState({ policy: null, event: null, hot: null });
+  const [discoverCache, setDiscoverCache] = useState({
+    policy: { categories: [], updatedAt: null },
+    event: { items: [], updatedAt: null },
+    hot: { items: [], updatedAt: null },
+  });
   const [view, setView] = useState('portfolio');
   const DISCOVER_TABS = [
     { key: 'policy', title: '最新政策' },
@@ -33,20 +35,20 @@ const SentimentWatchlistDashboard = () => {
     { key: 'hot', title: '热点' },
   ];
 
+  const parseWeightValue = (value) => {
+    if (value === '' || value === null || value === undefined) return null;
+    const v = Number(value);
+    return Number.isFinite(v) ? v : null;
+  };
+
   useEffect(() => {
     const savedPortfolio = localStorage.getItem('portfolio');
     if (savedPortfolio) {
       const parsed = JSON.parse(savedPortfolio);
       if (Array.isArray(parsed) && parsed.length && typeof parsed[0] === 'string') {
-        const eq = 100 / Math.min(parsed.length, MAX_DISPLAY);
-        setPortfolio(parsed.map(code => ({ code, entryPrice: null, entryDate: null, currency: '', weight: eq })));
+        setPortfolio(parsed.map(code => ({ code, entryPrice: null, entryDate: null, currency: '', weight: null })));
       } else {
-        const arr = (parsed || []).map(it => ({ ...it, weight: Number(it.weight) || 0 }));
-        const missing = arr.every(it => !it.weight);
-        if (missing && arr.length) {
-          const eq = 100 / Math.min(arr.length, MAX_DISPLAY);
-          arr.forEach(it => { it.weight = eq; });
-        }
+        const arr = (parsed || []).map(it => ({ ...it, weight: parseWeightValue(it.weight) }));
         setPortfolio(arr);
       }
     }
@@ -86,7 +88,14 @@ const SentimentWatchlistDashboard = () => {
   };
 
   const setWeight = (code, weightPercent) => {
-    const w = Math.max(0, Math.min(100, Number(weightPercent) || 0));
+    if (weightPercent === '') {
+      const next = portfolio.map(it => it.code === code ? { ...it, weight: null } : it);
+      savePortfolio(next);
+      return;
+    }
+    const v = Number(weightPercent);
+    if (!Number.isFinite(v)) return;
+    const w = Math.max(0, v);
     const next = portfolio.map(it => it.code === code ? { ...it, weight: w } : it);
     savePortfolio(next);
   };
@@ -133,22 +142,18 @@ const SentimentWatchlistDashboard = () => {
           entryPrice: data?.price ?? null,
           entryDate: new Date().toISOString(),
           currency: data?.currency ?? '',
-          weight: 0,
+          weight: null,
         };
         const updated = [...portfolio, item];
-        const eq = 100 / Math.min(updated.length, MAX_DISPLAY);
-        const normalized = updated.map(it => ({ ...it, weight: eq }));
-        savePortfolio(normalized);
+        savePortfolio(updated);
         setNewCode('');
         setQuotes(prev => ({ ...prev, [code]: data }));
       })
       .catch(() => {
         setError('无法获取行情，已添加持仓');
-        const item = { code, entryPrice: null, entryDate: new Date().toISOString(), currency: '', weight: 0 };
+        const item = { code, entryPrice: null, entryDate: new Date().toISOString(), currency: '', weight: null };
         const updated = [...portfolio, item];
-        const eq = 100 / Math.min(updated.length, MAX_DISPLAY);
-        const normalized = updated.map(it => ({ ...it, weight: eq }));
-        savePortfolio(normalized);
+        savePortfolio(updated);
         setNewCode('');
       });
   };
@@ -299,42 +304,43 @@ const SentimentWatchlistDashboard = () => {
   };
 
   const fetchDiscoverSection = async (sectionKey) => {
-    setDiscoverLoading(true);
-    setDiscoverError(null);
-    setDiscoverItems([]);
-    setDiscoverPolicyCategories([]);
-    setDiscoverUpdatedAt(null);
-    setDiscoverActiveTab(sectionKey);
+    setDiscoverLoadingTab(sectionKey);
+    setDiscoverErrorByTab(prev => ({ ...prev, [sectionKey]: null }));
     try {
       if (sectionKey === 'policy') {
         const { data } = await axios.get('/api/news/policy-impact');
-        setDiscoverPolicyCategories(data?.categories || []);
-        setDiscoverUpdatedAt(data?.updatedAt || null);
+        setDiscoverCache(prev => ({
+          ...prev,
+          policy: {
+            ...prev.policy,
+            categories: data?.categories || [],
+            updatedAt: data?.updatedAt || new Date().toISOString(),
+          },
+        }));
       } else {
         const { data } = await axios.get('/api/news/discover', { params: { section: sectionKey } });
         const section = data?.section || null;
-        setDiscoverItems(section?.items || []);
-        setDiscoverUpdatedAt(data?.updatedAt || null);
+        setDiscoverCache(prev => ({
+          ...prev,
+          [sectionKey]: {
+            ...prev[sectionKey],
+            items: section?.items || [],
+            updatedAt: data?.updatedAt || new Date().toISOString(),
+          },
+        }));
       }
     } catch {
-      setDiscoverError('获取发现内容失败，请稍后重试');
+      setDiscoverErrorByTab(prev => ({ ...prev, [sectionKey]: '获取发现内容失败，请稍后重试' }));
     } finally {
-      setDiscoverLoading(false);
+      setDiscoverLoadingTab(null);
     }
   };
   const discoverNews = async () => {
     setView('discover');
-    const initial = DISCOVER_TABS[0]?.key || 'policy';
-    fetchDiscoverSection(initial);
   };
 
   const backToPortfolio = () => {
     setView('portfolio');
-    setDiscoverLoading(false);
-    setDiscoverItems([]);
-    setDiscoverPolicyCategories([]);
-    setDiscoverUpdatedAt(null);
-    setDiscoverError(null);
   };
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-sans text-slate-900">
@@ -343,14 +349,15 @@ const SentimentWatchlistDashboard = () => {
       <main className="p-4 max-w-6xl mx-auto">
         {view === 'discover' ? (
           <DiscoverPanel
-            discoverLoading={discoverLoading}
-            discoverItems={discoverItems}
-            discoverPolicyCategories={discoverPolicyCategories}
-            discoverError={discoverError}
-            discoverUpdatedAt={discoverUpdatedAt}
+            discoverLoading={discoverLoadingTab === discoverActiveTab}
+            discoverItems={discoverCache[discoverActiveTab]?.items || []}
+            discoverPolicyCategories={discoverCache[discoverActiveTab]?.categories || []}
+            discoverError={discoverErrorByTab[discoverActiveTab]}
+            discoverUpdatedAt={discoverCache[discoverActiveTab]?.updatedAt || null}
             tabs={DISCOVER_TABS}
             activeTab={discoverActiveTab}
-            onTabChange={fetchDiscoverSection}
+            onTabChange={setDiscoverActiveTab}
+            onFetch={() => fetchDiscoverSection(discoverActiveTab)}
           />
         ) : null}
         {view !== 'discover' && (
