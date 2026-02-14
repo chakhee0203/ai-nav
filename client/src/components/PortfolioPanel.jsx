@@ -5,6 +5,7 @@ const PortfolioPanel = ({
   portfolio,
   maxDisplay,
   refreshQuotes,
+  refreshLoading,
   setWeight,
   setEntryPrice,
   sinceEntryPct,
@@ -53,9 +54,10 @@ const PortfolioPanel = ({
             </div>
             <button
               onClick={refreshQuotes}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+              disabled={refreshLoading}
+              className={`text-xs px-3 py-1.5 rounded-lg border ${refreshLoading ? 'bg-slate-100 text-slate-400 border-slate-200' : 'text-slate-700 border-slate-200 hover:bg-slate-50'}`}
             >
-              刷新行情
+              {refreshLoading ? '刷新中...' : '刷新行情'}
             </button>
           </div>
           <div className="p-4">

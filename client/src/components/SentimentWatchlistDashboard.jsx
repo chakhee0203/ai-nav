@@ -54,12 +54,14 @@ const SentimentWatchlistDashboard = () => {
     }
   }, []);
 
+  const [refreshLoading, setRefreshLoading] = useState(false);
   const refreshQuotes = () => {
     if (!portfolio.length) {
       setQuotes({});
       setError(null);
       return;
     }
+    setRefreshLoading(true);
     setError(null);
     Promise.all(portfolio.map(it => axios.get(`/api/quote?code=${encodeURIComponent(it.code)}`)))
       .then(responses => {
@@ -75,6 +77,9 @@ const SentimentWatchlistDashboard = () => {
       })
       .catch(() => {
         setError('行情更新失败，请稍后重试');
+      })
+      .finally(() => {
+        setRefreshLoading(false);
       });
   };
 
@@ -365,6 +370,7 @@ const SentimentWatchlistDashboard = () => {
             portfolio={portfolio}
             maxDisplay={MAX_DISPLAY}
             refreshQuotes={refreshQuotes}
+            refreshLoading={refreshLoading}
             setWeight={setWeight}
             setEntryPrice={setEntryPrice}
             sinceEntryPct={sinceEntryPct}
