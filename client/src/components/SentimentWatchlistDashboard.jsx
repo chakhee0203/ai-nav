@@ -23,6 +23,7 @@ const SentimentWatchlistDashboard = () => {
   const [portfolioHistory, setPortfolioHistory] = useState([]);
   const [closeLoading, setCloseLoading] = useState({});
   const [returnDetailsOpen, setReturnDetailsOpen] = useState(false);
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editCode, setEditCode] = useState(null);
   const [editWeight, setEditWeight] = useState('');
@@ -223,6 +224,10 @@ const SentimentWatchlistDashboard = () => {
     saveHistory([record, ...portfolioHistory]);
     removeCode(code);
     setCloseLoading(prev => ({ ...prev, [code]: false }));
+  };
+  const clearHistory = () => {
+    saveHistory([]);
+    setClearHistoryOpen(false);
   };
 
   const analyzeOne = async (code) => {
@@ -472,6 +477,7 @@ const SentimentWatchlistDashboard = () => {
             analysisLoading={analysisLoading}
             analysisByCode={analysisByCode}
             analysisError={analysisError}
+            removeCode={removeCode}
             totalWeight={totalWeight}
             newCode={newCode}
             setNewCode={setNewCode}
@@ -548,8 +554,18 @@ const SentimentWatchlistDashboard = () => {
         <div className="fixed inset-0 z-40 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setReturnDetailsOpen(false)} />
           <div className="relative bg-white rounded-xl shadow-lg w-full max-w-lg mx-4 p-4 max-h-[80vh] overflow-y-auto">
-            <div className="text-sm font-semibold text-slate-900">收益明细</div>
-            <div className="text-xs text-slate-500 mt-1">包含当前持仓与历史清仓</div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">收益明细</div>
+                <div className="text-xs text-slate-500 mt-1">包含当前持仓与历史清仓</div>
+              </div>
+              <button
+                onClick={() => setClearHistoryOpen(true)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                一键清空
+              </button>
+            </div>
 
             <div className="mt-4">
               <div className="text-xs font-semibold text-slate-700">当前持仓</div>
@@ -614,6 +630,30 @@ const SentimentWatchlistDashboard = () => {
                 className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
               >
                 关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {clearHistoryOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setClearHistoryOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-lg w-full max-w-sm mx-4 p-4">
+            <div className="text-sm font-semibold text-slate-900">清空历史收益</div>
+            <div className="text-xs text-slate-500 mt-2">仅清空历史清仓记录，不影响当前持仓。</div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setClearHistoryOpen(false)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={clearHistory}
+                className="text-xs px-3 py-1.5 rounded-lg border border-red-600 bg-red-600 text-white hover:bg-red-700"
+              >
+                清空
               </button>
             </div>
           </div>
