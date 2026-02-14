@@ -155,6 +155,84 @@ app.get('/api/news/related', async (req, res) => {
   }
 });
 
+app.get('/api/news/discover', async (req, res) => {
+  const rate = checkRateLimit(req);
+  if (!rate.allowed) {
+    res.set('Retry-After', String(rate.retryAfter));
+    return res.status(429).json({ error: 'Too Many Requests' });
+  }
+  const { section } = req.query;
+  const sections = [
+    { key: 'policy', title: '最新政策', queries: ['政策', '宏观政策', '产业政策'] },
+    { key: 'event', title: '大事件', queries: ['重大事件', '重要会议', '突发事件'] },
+    { key: 'hot', title: '热点', queries: ['市场热点', '行业热点', '经济热点'] },
+  ];
+  try {
+    const buildSection = async (target) => {
+      const uniq = new Map();
+      for (const q of target.queries) {
+        const items = await fetchNews(q, { limit: 8 });
+        items.forEach((it) => {
+          const key = it.link || it.title;
+          if (!uniq.has(key)) uniq.set(key, { ...it, query: q });
+        });
+      }
+      return { key: target.key, title: target.title, items: Array.from(uniq.values()).slice(0, 12) };
+    };
+    if (section) {
+      const target = sections.find(s => s.key === String(section).trim());
+      if (!target) return res.status(400).json({ error: 'Invalid section' });
+      const result = await buildSection(target);
+      return res.json({ section: result, updatedAt: new Date().toISOString() });
+    }
+    const results = [];
+    for (const target of sections) {
+      results.push(await buildSection(target));
+    }
+    res.json({ sections: results, updatedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Discover news fetch failed' });
+  }
+});
+
+app.get('/api/news/policy-impact', async (req, res) => {
+  const rate = checkRateLimit(req);
+  if (!rate.allowed) {
+    res.set('Retry-After', String(rate.retryAfter));
+    return res.status(429).json({ error: 'Too Many Requests' });
+  }
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const categories = [
+    { key: 'macro', title: '宏观政策', queries: [`${year} 宏观政策 市场 影响`, `${year} 经济政策 市场 影响`, `${year} 政策 影响 市场`] },
+    { key: 'monetary', title: '货币政策', queries: [`${year} 货币政策 市场 影响`, `${year} 降准 降息 市场 影响`, `${year} 流动性 政策`] },
+    { key: 'fiscal', title: '财政政策', queries: [`${year} 财政政策 市场 影响`, `${year} 税收 政策 市场 影响`, `${year} 国债 发行 政策`] },
+    { key: 'capital', title: '资本市场', queries: [`${year} 资本市场 政策`, `${year} 证券 监管 政策`, `${year} IPO 政策 市场 影响`] },
+    { key: 'property', title: '房地产与基建', queries: [`${year} 房地产 政策 市场 影响`, `${year} 基建 投资 政策`, `${year} 城市 更新 政策`] },
+    { key: 'industry', title: '产业与科技', queries: [`${year} 产业政策 市场 影响`, `${year} 科技 政策 市场 影响`, `${year} 制造业 政策`] },
+  ];
+  try {
+    const results = [];
+    for (const category of categories) {
+      const uniq = new Map();
+      for (const q of category.queries) {
+        const items = await fetchNews(q, { limit: 8 });
+        items.forEach((it) => {
+          const key = it.link || it.title;
+          if (!uniq.has(key)) uniq.set(key, { ...it, query: q });
+        });
+      }
+      const items = Array.from(uniq.values()).slice(0, 12);
+      const summary = items.length ? items.slice(0, 3).map(it => it.title).join('；') : '暂无';
+      results.push({ key: category.key, title: category.title, summary, items });
+    }
+    res.json({ year, categories: results, updatedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Policy impact fetch failed' });
+  }
+});
+
 // Serve built frontend
 const staticDir = path.join(__dirname, '../public');
 app.use(express.static(staticDir));
