@@ -20,6 +20,13 @@ const SentimentWatchlistDashboard = () => {
   const [drawerCode, setDrawerCode] = useState(null);
   const [error, setError] = useState(null);
   const [quotes, setQuotes] = useState({});
+  const [portfolioHistory, setPortfolioHistory] = useState([]);
+  const [closeLoading, setCloseLoading] = useState({});
+  const [returnDetailsOpen, setReturnDetailsOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editCode, setEditCode] = useState(null);
+  const [editWeight, setEditWeight] = useState('');
+  const [editEntryPrice, setEditEntryPrice] = useState('');
   const [discoverActiveTab, setDiscoverActiveTab] = useState('policy');
   const [discoverLoadingTab, setDiscoverLoadingTab] = useState(null);
   const [discoverErrorByTab, setDiscoverErrorByTab] = useState({ policy: null, event: null, hot: null });
@@ -51,6 +58,11 @@ const SentimentWatchlistDashboard = () => {
         const arr = (parsed || []).map(it => ({ ...it, weight: parseWeightValue(it.weight) }));
         setPortfolio(arr);
       }
+    }
+    const savedHistory = localStorage.getItem('portfolioHistory');
+    if (savedHistory) {
+      const parsed = JSON.parse(savedHistory);
+      if (Array.isArray(parsed)) setPortfolioHistory(parsed);
     }
   }, []);
 
@@ -86,6 +98,10 @@ const SentimentWatchlistDashboard = () => {
   const savePortfolio = (newPortfolio) => {
     setPortfolio(newPortfolio);
     localStorage.setItem('portfolio', JSON.stringify(newPortfolio));
+  };
+  const saveHistory = (records) => {
+    setPortfolioHistory(records);
+    localStorage.setItem('portfolioHistory', JSON.stringify(records));
   };
 
   const totalWeight = () => {
@@ -172,6 +188,42 @@ const SentimentWatchlistDashboard = () => {
       return n;
     });
   };
+  const closePosition = async (code) => {
+    const item = portfolio.find(it => it.code === code);
+    if (!item || closeLoading[code]) return;
+    setCloseLoading(prev => ({ ...prev, [code]: true }));
+    let exitPrice = quotes[code]?.price ?? null;
+    let currency = item.currency || '';
+    if (exitPrice === null || exitPrice === undefined) {
+      try {
+        const { data } = await axios.get(`/api/quote?code=${encodeURIComponent(code)}`);
+        if (data) {
+          exitPrice = data.price ?? exitPrice;
+          currency = data.currency ?? currency;
+          setQuotes(prev => ({ ...prev, [code]: data }));
+        }
+      } catch {
+      }
+    }
+    const returnPct = item.entryPrice && exitPrice ? ((exitPrice / item.entryPrice) - 1) * 100 : null;
+    const wMap = normalizedWeights(portfolio.map(it => it.code));
+    const weightShare = wMap[code] || 0;
+    const contributionPct = Number.isFinite(returnPct) ? returnPct * weightShare : 0;
+    const record = {
+      code,
+      entryPrice: item.entryPrice ?? null,
+      exitPrice: exitPrice ?? null,
+      entryDate: item.entryDate ?? null,
+      exitDate: new Date().toISOString(),
+      currency,
+      weightShare,
+      returnPct,
+      contributionPct,
+    };
+    saveHistory([record, ...portfolioHistory]);
+    removeCode(code);
+    setCloseLoading(prev => ({ ...prev, [code]: false }));
+  };
 
   const analyzeOne = async (code) => {
     setAnalysisLoading(prev => ({ ...prev, [code]: true }));
@@ -201,6 +253,44 @@ const SentimentWatchlistDashboard = () => {
   const handleAnalyze = (code) => {
     openDrawer(code);
     if (!analysisByCode[code]) analyzeOne(code);
+  };
+
+  const openEdit = (code) => {
+    const item = portfolio.find(it => it.code === code);
+    if (!item) return;
+    setEditCode(code);
+    setEditWeight(item.weight ?? '');
+    setEditEntryPrice(item.entryPrice ?? '');
+    setEditOpen(true);
+  };
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditCode(null);
+    setEditWeight('');
+    setEditEntryPrice('');
+  };
+  const saveEdit = () => {
+    if (!editCode) return;
+    const next = portfolio.map(it => {
+      if (it.code !== editCode) return it;
+      let weight = it.weight;
+      if (editWeight === '') {
+        weight = null;
+      } else {
+        const v = Number(editWeight);
+        if (Number.isFinite(v)) weight = Math.max(0, v);
+      }
+      let entryPrice = it.entryPrice;
+      if (editEntryPrice === '') {
+        entryPrice = null;
+      } else {
+        const v = Number(editEntryPrice);
+        if (Number.isFinite(v) && v >= 0) entryPrice = v;
+      }
+      return { ...it, weight, entryPrice };
+    });
+    savePortfolio(next);
+    closeEdit();
   };
 
   useEffect(() => {
@@ -285,9 +375,10 @@ const SentimentWatchlistDashboard = () => {
       if (!it.entryPrice || !q?.price) return null;
       return ((q.price / it.entryPrice) - 1) * (wMap[it.code] || 0);
     }).filter(v => v !== null);
-    if (!vals.length) return null;
     const sum = vals.reduce((a, b) => a + b, 0);
-    return sum * 100;
+    const realized = portfolioHistory.reduce((s, r) => s + (Number(r.contributionPct) || 0), 0);
+    if (!vals.length && !realized) return null;
+    return (sum * 100) + realized;
   };
 
   const portfolioDailyEstimate = () => {
@@ -371,15 +462,16 @@ const SentimentWatchlistDashboard = () => {
             maxDisplay={MAX_DISPLAY}
             refreshQuotes={refreshQuotes}
             refreshLoading={refreshLoading}
-            setWeight={setWeight}
-            setEntryPrice={setEntryPrice}
+            onUnlockEdit={openEdit}
+            onClosePosition={closePosition}
+            closeLoading={closeLoading}
+            onShowReturnDetails={() => setReturnDetailsOpen(true)}
             sinceEntryPct={sinceEntryPct}
             dailyChangePct={dailyChangePct}
             handleAnalyze={handleAnalyze}
             analysisLoading={analysisLoading}
             analysisByCode={analysisByCode}
             analysisError={analysisError}
-            removeCode={removeCode}
             totalWeight={totalWeight}
             newCode={newCode}
             setNewCode={setNewCode}
@@ -403,6 +495,130 @@ const SentimentWatchlistDashboard = () => {
         analysisError={analysisError}
         analysisByCode={analysisByCode}
       />
+
+      {editOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={closeEdit} />
+          <div className="relative bg-white rounded-xl shadow-lg w-full max-w-sm mx-4 p-4">
+            <div className="text-sm font-semibold text-slate-900">编辑占比与成本价</div>
+            <div className="text-xs text-slate-500 mt-1">{editCode}</div>
+            <div className="mt-4 space-y-3">
+              <div>
+                <div className="text-xs text-slate-500 mb-1">占比</div>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={editWeight}
+                  onChange={(e) => setEditWeight(e.target.value)}
+                  className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-1">成本价</div>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={editEntryPrice}
+                  onChange={(e) => setEditEntryPrice(e.target.value)}
+                  className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={closeEdit}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={saveEdit}
+                className="text-xs px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {returnDetailsOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setReturnDetailsOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-lg w-full max-w-lg mx-4 p-4 max-h-[80vh] overflow-y-auto">
+            <div className="text-sm font-semibold text-slate-900">收益明细</div>
+            <div className="text-xs text-slate-500 mt-1">包含当前持仓与历史清仓</div>
+
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-slate-700">当前持仓</div>
+              <div className="mt-2 space-y-2">
+                {portfolio.map((it) => {
+                  const q = quotes[it.code];
+                  const wMap = normalizedWeights(portfolio.map(p => p.code));
+                  const weightShare = wMap[it.code] || 0;
+                  const returnPct = it.entryPrice && q?.price ? ((q.price / it.entryPrice) - 1) * 100 : null;
+                  const contributionPct = Number.isFinite(returnPct) ? returnPct * weightShare : null;
+                  return (
+                    <div key={it.code} className="text-xs flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2">
+                      <div>
+                        <div className="text-slate-900 font-semibold">{it.code}</div>
+                        <div className="text-slate-500">
+                          成本 {it.entryPrice ?? '—'} / 现价 {q?.price ?? '—'}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`${Number(returnPct) >= 0 ? 'text-red-600' : 'text-green-600'} font-semibold`}>
+                          {returnPct === null ? '—' : `${returnPct.toFixed(2)}%`}
+                        </div>
+                        <div className="text-slate-500">
+                          贡献 {contributionPct === null ? '—' : `${contributionPct.toFixed(2)}%`}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!portfolio.length ? <div className="text-xs text-slate-500">暂无持仓</div> : null}
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <div className="text-xs font-semibold text-slate-700">历史清仓</div>
+              <div className="mt-2 space-y-2">
+                {portfolioHistory.map((it, idx) => (
+                  <div key={`${it.code}-${it.exitDate}-${idx}`} className="text-xs flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2">
+                    <div>
+                      <div className="text-slate-900 font-semibold">{it.code}</div>
+                      <div className="text-slate-500">
+                        成本 {it.entryPrice ?? '—'} / 清仓 {it.exitPrice ?? '—'}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`${Number(it.returnPct) >= 0 ? 'text-red-600' : 'text-green-600'} font-semibold`}>
+                        {it.returnPct === null ? '—' : `${Number(it.returnPct).toFixed(2)}%`}
+                      </div>
+                      <div className="text-slate-500">
+                        贡献 {it.contributionPct === null ? '—' : `${Number(it.contributionPct).toFixed(2)}%`}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {!portfolioHistory.length ? <div className="text-xs text-slate-500">暂无历史</div> : null}
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setReturnDetailsOpen(false)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <BottomNav active={view} onDiscover={discoverNews} onPortfolio={backToPortfolio} />
       

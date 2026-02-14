@@ -1,20 +1,21 @@
 import React from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Lock, Plus } from 'lucide-react';
 
 const PortfolioPanel = ({
   portfolio,
   maxDisplay,
   refreshQuotes,
   refreshLoading,
-  setWeight,
-  setEntryPrice,
+  onUnlockEdit,
+  onClosePosition,
+  closeLoading,
+  onShowReturnDetails,
   sinceEntryPct,
   dailyChangePct,
   handleAnalyze,
   analysisLoading,
   analysisByCode,
   analysisError,
-  removeCode,
   totalWeight,
   newCode,
   setNewCode,
@@ -31,12 +32,15 @@ const PortfolioPanel = ({
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div className="text-sm font-semibold text-slate-900">组合概览</div>
         <div className="grid grid-cols-2 gap-3 mt-3">
-          <div className="rounded-lg border border-slate-200 p-3">
+          <button
+            onClick={onShowReturnDetails}
+            className="rounded-lg border border-slate-200 p-3 text-left hover:bg-slate-50"
+          >
             <div className="text-xs text-slate-500">累计收益</div>
             <div className={`mt-2 text-lg font-semibold ${Number(portfolioSinceEntry()) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
               {portfolioSinceEntry() === null ? '—' : `${portfolioSinceEntry().toFixed(2)}%`}
             </div>
-          </div>
+          </button>
           <div className="rounded-lg border border-slate-200 p-3">
             <div className="text-xs text-slate-500">当日收益率（估）</div>
             <div className={`mt-2 text-lg font-semibold ${Number(portfolioDailyEstimate()) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -71,25 +75,21 @@ const PortfolioPanel = ({
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-semibold text-slate-900">{item.code}</span>
                         <span className="text-xs text-slate-500">占比</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.1}
-                          value={item.weight ?? ''}
-                          onChange={(e) => setWeight(item.code, e.target.value)}
-                          className="w-20 border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+                        <span className="text-xs text-slate-700 font-semibold">
+                          {item.weight ?? '—'}
+                        </span>
+                        <button
+                          onClick={() => onUnlockEdit(item.code)}
+                          className="p-1 text-slate-400 hover:text-slate-700"
+                        >
+                          <Lock size={16} />
+                        </button>
                       </div>
                       <div className="text-xs text-slate-500 mt-2 flex items-center gap-2">
                         <span>成本价</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={item.entryPrice ?? ''}
-                          onChange={(e) => setEntryPrice(item.code, e.target.value)}
-                          className="w-24 border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+                        <span className="text-xs text-slate-700 font-semibold">
+                          {item.entryPrice ?? '—'}
+                        </span>
                         <span className="text-slate-400">{item.currency}</span>
                       </div>
                       <div className="text-xs mt-2">
@@ -114,17 +114,18 @@ const PortfolioPanel = ({
                         >
                           {analysisLoading[item.code] ? '分析中...' : (analysisByCode[item.code] ? '查看分析' : '立即分析')}
                         </button>
+                        <button
+                          onClick={() => onClosePosition(item.code)}
+                          disabled={closeLoading[item.code]}
+                          className={`text-xs px-3 py-1.5 rounded-lg border ${closeLoading[item.code] ? 'bg-slate-100 text-slate-400 border-slate-200' : 'text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                          {closeLoading[item.code] ? '清仓中...' : '清仓'}
+                        </button>
                         {analysisError[item.code] ? (
                           <span className="text-xs text-red-600">{analysisError[item.code]}</span>
                         ) : null}
                       </div>
                     </div>
-                    <button
-                      onClick={() => removeCode(item.code)}
-                      className="text-slate-400 hover:text-red-600 p-1"
-                    >
-                      <Trash2 size={18} />
-                    </button>
                   </li>
                 ))}
               </ul>
